@@ -1,0 +1,23 @@
+simulator/
+│
+├── main.py
+│
+├── ui/
+│   ├── __init__.py      
+│   └── atc_ui.py
+│
+├── engine/
+│   ├── __init__.py    
+│   ├── system_messages_manager.py      
+│   ├── simulation_engine.py
+│   └── event_scheduler.py
+│
+├── levels/
+│   ├── __init__.py     
+│   ├── cognitive_load.py
+│   └── task_complexity.py
+│
+├── core/
+│   ├── __init__.py     
+│   ├── flight.py
+│   └── runway.py
