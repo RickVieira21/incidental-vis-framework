@@ -3,6 +3,7 @@ from tkinter import ttk
 
 class ScrollableFrame(ttk.Frame):
     def __init__(self, container):
+
         super().__init__(container)
 
         canvas = tk.Canvas(self, borderwidth=0, highlightthickness=0)
@@ -26,6 +27,20 @@ class ATCApp:
         self.root = root
         self.root.title("ATC Simulator")
         self.root.geometry("1450x820")
+                
+        self.selected_flight = None
+        self.selected_flight_button = None
+        self.selected_runway = None
+
+        self.runway_occupied = {
+            "A": False,
+            "B": False,
+            "C": False
+        }
+
+        self.runway_timers = {}
+        self.runway_timer_texts = {}
+
 
         main_frame = tk.Frame(root)
         main_frame.pack(fill="both", expand=True)
@@ -98,13 +113,54 @@ class ATCApp:
         spacing = 35
         y = 20
 
+        self.runways = {}
+
         for name in ["A", "B", "C"]:
-            self.canvas.create_rectangle(60, y, 750, y + lane_height,
-                                         fill="#b3ffb3", outline="black", width=2)
-            self.canvas.create_text(80, y + lane_height/2,
-                                    text=f"Runway {name}", anchor="w",
-                                    font=("Arial", 16, "bold"))
+            rect = self.canvas.create_rectangle(
+                60, y, 750, y + lane_height,
+                fill="#b3ffb3", outline="black", width=2
+            )
+
+            self.canvas.create_text(
+                80, y + lane_height/2,
+                text=f"Runway {name}",
+                anchor="w",
+                font=("Arial", 16, "bold")
+            )
+
+            text_id = self.canvas.create_text(
+            650, y + lane_height/2,
+            text="",
+            anchor="e",
+            font=("Arial", 14, "bold"),
+            fill="red"
+            )
+
+            self.runway_timer_texts[name] = text_id
+
+            self.canvas.tag_bind(rect, "<Button-1>",
+                lambda e, r=name: self.select_runway(r))
+
+            self.runways[name] = rect
             y += lane_height + spacing
+
+
+
+    def select_runway(self, runway_name):
+        if not self.selected_flight:
+            self.add_log("No flight selected.")
+            return
+
+        if self.runway_occupied[runway_name]:
+            self.add_log(f"Pista {runway_name} está ocupada.")
+            return
+
+        self.selected_runway = runway_name
+        self.add_log(
+            f"Pretende atribuir o voo {self.selected_flight} "
+            f"à pista {runway_name}? Carregar Authorize para confirmar."
+        )
+
 
     # ---------------------------
 
@@ -118,19 +174,77 @@ class ATCApp:
             self.scroll.scrollable_frame,
             text=text,
             font=("Arial", 14),
-            relief="raised",
             bg="#e6f0ff",
-            width=55,  # reduzido para caber melhor
-            height=2,
-            command=lambda t=text: self.select_flight(t)
+            width=55,  
+            height=2
         )
+
+        btn.config(command=lambda: self.select_flight(btn, text))
+
         btn.pack(fill="x", pady=5)
 
-    def select_flight(self, flight):
+
+
+    def select_flight(self, button, flight):
+        # limpar seleção anterior
+        if self.selected_flight_button:
+            self.selected_flight_button.config(bg="#e6f0ff")
+
+        # marcar novo
+        self.selected_flight_button = button
+        self.selected_flight = flight
+        button.config(bg="#99ccff")
+
         self.add_log(f"Selected flight: {flight}")
 
+
     def authorize(self):
-        self.add_log("Authorization sent.")
+        if not self.selected_flight or not self.selected_runway:
+            self.add_log("Selecione um voo e uma pista primeiro.")
+            return
+
+        runway = self.selected_runway
+        rect = self.runways[runway]
+
+        # marcar pista como ocupada
+        self.runway_occupied[runway] = True
+        self.canvas.itemconfig(rect, fill="red")
+
+        # remover voo da queue
+        self.selected_flight_button.destroy()
+
+        self.add_log(
+            f"Voo {self.selected_flight} autorizado para a pista {runway}."
+        )
+
+        # duração (exemplo simples por agora)
+        duration = 10  # segundos (depois ligamos ao nível)
+        self.start_runway_timer(runway, duration)
+
+        # limpar estado
+        self.selected_flight = None
+        self.selected_flight_button = None
+        self.selected_runway = None
+
+    
+    def start_runway_timer(self, runway, remaining):
+        text_id = self.runway_timer_texts[runway]
+        rect = self.runways[runway]
+
+        if remaining > 0:
+            self.canvas.itemconfig(text_id, text=f"Ocupada: {remaining}s")
+            self.root.after(
+                1000,
+                lambda: self.start_runway_timer(runway, remaining - 1)
+            )
+        else:
+            # libertar pista
+            self.canvas.itemconfig(rect, fill="#b3ffb3")
+            self.canvas.itemconfig(text_id, text="")
+            self.runway_occupied[runway] = False
+            self.add_log(f"Pista {runway} está novamente disponível.")
+
+
 
     def add_log(self, msg):
         self.log.config(state="normal")
