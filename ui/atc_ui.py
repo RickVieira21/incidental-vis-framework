@@ -185,7 +185,8 @@ class ATCApp:
             self.canvas.itemconfig(rect, fill="red")
             self.canvas.itemconfig(
                 text_id,
-                text=f"Ocupada: {runway.remaining_time}s"
+                text=f"Ocupada: {runway.remaining_time}s",
+                fill="white"
             )
 
 
@@ -272,26 +273,6 @@ class ATCApp:
 
         self.selected_flight = None
         self.selected_flight_button = None
-
-
-    
-    def start_runway_timer(self, runway, remaining):
-        text_id = self.runway_timer_texts[runway]
-        rect = self.runways[runway]
-
-        if remaining > 0:
-            self.canvas.itemconfig(text_id, text=f"Ocupada: {remaining}s")
-            self.root.after(
-                1000,
-                lambda: self.start_runway_timer(runway, remaining - 1)
-            )
-        else:
-            # libertar pista
-            self.canvas.itemconfig(rect, fill="#b3ffb3")
-            self.canvas.itemconfig(text_id, text="")
-            self.runway_occupied[runway] = False
-            self.add_log(f"Pista {runway} está novamente disponível.")
-
 
 
     def add_log(self, msg):
