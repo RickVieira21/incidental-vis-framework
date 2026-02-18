@@ -341,7 +341,6 @@ class ATCApp:
         label.pack(side="left", fill="x")
 
 
-
     def acknowledge_message(self, message_obj, var, label):
         if not var.get():
             return
@@ -357,6 +356,53 @@ class ATCApp:
 
 
 
+class StartMenu:
+    def __init__(self, root, on_start_callback):
+        self.root = root
+        self.on_start = on_start_callback
+
+        self.frame = tk.Frame(root, bg="#e6e6e6")
+        self.frame.pack(fill="both", expand=True)
+
+        tk.Label(
+            self.frame,
+            text="ATC Cognitive Load Experiment",
+            font=("Arial", 22, "bold"),
+            bg="#e6e6e6"
+        ).pack(pady=40)
+
+        tk.Label(
+            self.frame,
+            text="Select Participant ID:",
+            font=("Arial", 14),
+            bg="#e6e6e6"
+        ).pack(pady=10)
+
+        self.participant_var = tk.IntVar(value=1)
+
+        self.spinbox = tk.Spinbox(
+            self.frame,
+            from_=1,
+            to=30,
+            textvariable=self.participant_var,
+            font=("Arial", 14),
+            width=5
+        )
+        self.spinbox.pack(pady=10)
+
+        tk.Button(
+            self.frame,
+            text="START",
+            font=("Arial", 16, "bold"),
+            width=12,
+            height=2,
+            command=self.start_experiment
+        ).pack(pady=40)
+
+    def start_experiment(self):
+        participant_id = self.participant_var.get()
+        self.frame.destroy()
+        self.on_start(participant_id)
 
 
 
