@@ -103,6 +103,12 @@ class ExperimentalSession:
 
     def update_trial_timer(self):
 
+        if not hasattr(self, "condition_label"):
+            return
+
+        if not self.condition_label.winfo_exists():
+            return
+
         if self.trial_time_left < 0:
             return
 
@@ -117,7 +123,7 @@ class ExperimentalSession:
         self.trial_time_left -= 1
 
         if self.trial_time_left >= 0:
-            self.root.after(1000, self.update_trial_timer)
+            self.timer_after_id = self.root.after(1000, self.update_trial_timer)
 
 
 
@@ -126,8 +132,13 @@ class ExperimentalSession:
     def start_baseline(self):
 
         print("Baseline period")
-        if hasattr(self, "condition_label"):
-           self.condition_label.destroy()
+        # Cancelar timer da condição
+        if hasattr(self, "timer_after_id"):
+            self.root.after_cancel(self.timer_after_id)
+
+        # Remover label se existir
+        if hasattr(self, "condition_label") and self.condition_label.winfo_exists():
+            self.condition_label.destroy()
 
         # Parar scheduler
         self.scheduler.stop()
@@ -182,11 +193,6 @@ class ExperimentalSession:
             print("Experiment finished")
             return
 
-        condition = self.conditions[self.current_index]
-
-        # Recriar perfis
-        self.apply_condition(condition)
-
         # Recriar engine e UI do zero
         cognitive = self.engine.cognitive
         complexity = self.engine.complexity
@@ -196,12 +202,7 @@ class ExperimentalSession:
         self.scheduler = EventScheduler(self.root, self.engine, self.app)
 
         self.scheduler.start()
-
-        # Timer da condição
-        self.root.after(
-            self.condition_duration * 1000,
-            self.start_baseline
-        )
+        self.start_condition()
 
 
 
