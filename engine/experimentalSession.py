@@ -1,5 +1,10 @@
+import tkinter as tk
 from levels.cognitive_load import CognitiveLoadProfile
 from levels.task_complexity import TaskComplexityProfile
+from ui.atc_ui import ATCApp
+from engine.simulation_engine import SimulationEngine
+from engine.event_scheduler import EventScheduler
+
 
 class ExperimentalSession:
 
@@ -70,28 +75,134 @@ class ExperimentalSession:
         # aplicar condição ao engine aqui
         self.apply_condition(condition)
 
+        # Criar indicador de condição no canto inferior direito
+        self.trial_time_left = self.condition_duration
+
+        self.condition_label = tk.Label(
+            self.root,
+            text="",
+            font=("Arial", 12, "bold"),
+            bg="#f0f0f0",
+            anchor="e",
+            justify="right"
+        )
+
+        self.condition_label.place(
+            relx=1.0,
+            rely=1.0,
+            anchor="se",
+            x=-20,
+            y=-20
+        )
+
+        self.update_trial_timer()
+
         # timer 120s
         self.root.after(self.condition_duration * 1000, self.start_baseline)
 
+
+    def update_trial_timer(self):
+
+        if self.trial_time_left < 0:
+            return
+
+        minutes = self.trial_time_left // 60
+        seconds = self.trial_time_left % 60
+
+        self.condition_label.config(
+            text=f"Condition {self.current_index + 1} / {len(self.conditions)}\n"
+                f"Time left: {minutes:02d}:{seconds:02d}"
+        )
+
+        self.trial_time_left -= 1
+
+        if self.trial_time_left >= 0:
+            self.root.after(1000, self.update_trial_timer)
+
+
+
+# ------------- BASELINE -----------------
+
     def start_baseline(self):
+
         print("Baseline period")
+        if hasattr(self, "condition_label"):
+           self.condition_label.destroy()
 
-        # parar simulação
-        self.scheduler.running = False
+        # Parar scheduler
+        self.scheduler.stop()
 
-        # ecrã branco
-        self.ui.root.configure(bg="white")
+        # Reset engine state
+        self.engine.flights.clear()
 
-        self.root.after(self.baseline_duration * 1000, self.next_condition)
+        # Destruir UI atual
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Criar overlay branco
+        self.baseline_frame = tk.Frame(self.root, bg="white")
+        self.baseline_frame.pack(fill="both", expand=True)
+
+        self.countdown = self.baseline_duration
+
+        self.baseline_label = tk.Label(
+            self.baseline_frame,
+            text=f"Baseline Period\n\n{self.countdown}",
+            font=("Arial", 32, "bold"),
+            bg="white"
+        )
+        self.baseline_label.pack(expand=True)
+
+        self.update_baseline_countdown()
+
+
+    def update_baseline_countdown(self):
+
+        if self.countdown <= 0:
+            self.baseline_frame.destroy()
+            self.next_condition()
+            return
+
+        self.baseline_label.config(
+            text=f"Baseline Period\n\n{self.countdown}"
+        )
+
+        self.countdown -= 1
+        self.root.after(1000, self.update_baseline_countdown)
+
+
+# --------------------------------------------
+
 
     def next_condition(self):
-        # restaurar cor normal
-        self.ui.root.configure(bg="#f0f0f0")
-
-        self.scheduler.running = True
 
         self.current_index += 1
-        self.start_condition()
+
+        if self.current_index >= len(self.conditions):
+            print("Experiment finished")
+            return
+
+        condition = self.conditions[self.current_index]
+
+        # Recriar perfis
+        self.apply_condition(condition)
+
+        # Recriar engine e UI do zero
+        cognitive = self.engine.cognitive
+        complexity = self.engine.complexity
+
+        self.engine = SimulationEngine(cognitive, complexity)
+        self.app = ATCApp(self.root, self.engine)
+        self.scheduler = EventScheduler(self.root, self.engine, self.app)
+
+        self.scheduler.start()
+
+        # Timer da condição
+        self.root.after(
+            self.condition_duration * 1000,
+            self.start_baseline
+        )
+
 
 
     def apply_condition(self, letter):
