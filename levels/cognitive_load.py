@@ -31,7 +31,7 @@ class CognitiveLoadProfile:
               self.event_rate = 3.0
               self.decision_timeout = 5
               self.time_speed = 1
-              self.message_frequency = 0.6
+              self.message_frequency = 0.9
               self.messages = [
                 "URGENT: Confirm separation.",
                 "Acknowledge conflict alert.",
