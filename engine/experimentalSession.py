@@ -18,6 +18,8 @@ class ExperimentalSession:
         self.current_index = 0
         self.conditions = self.load_conditions(participant_id)
 
+        self.incidental_image = tk.PhotoImage(file="incidental.png")
+
     def attach(self, engine, ui, scheduler):
         self.engine = engine
         self.ui = ui
@@ -97,6 +99,18 @@ class ExperimentalSession:
 
         self.update_trial_timer()
 
+        self.incidental_after_ids = []
+
+        # IVs - momentos em segundos (relativos ao início do trial)
+        self.incidental_times = [25, 50, 75, 100]
+
+        for t in self.incidental_times:
+            after_id = self.root.after(
+                t * 1000,
+                self.show_incidental_visualization
+            )
+            self.incidental_after_ids.append(after_id)
+
         # timer 120s
         self.root.after(self.condition_duration * 1000, self.start_baseline)
 
@@ -139,6 +153,15 @@ class ExperimentalSession:
         # Remover label se existir
         if hasattr(self, "condition_label") and self.condition_label.winfo_exists():
             self.condition_label.destroy()
+
+        # Cancelar visualizações agendadas
+        if hasattr(self, "incidental_after_ids"):
+            for after_id in self.incidental_after_ids:
+                self.root.after_cancel(after_id)
+
+        # Fechar janela se ainda estiver aberta
+        if hasattr(self, "incidental_window") and self.incidental_window.winfo_exists():
+            self.incidental_window.destroy()
 
         # Parar scheduler
         self.scheduler.stop()
@@ -227,4 +250,36 @@ class ExperimentalSession:
 
         print(f"Condition {letter} → Cognitive: {cog_level}, Complexity: {comp_level}")
 
+
+# ---------------- INCIDENTAL VIS -----------------
+
+    def show_incidental_visualization(self):
+
+        self.incidental_window = tk.Toplevel(self.root)
+        self.incidental_window.overrideredirect(True) #remover bordas
+        self.incidental_window.attributes("-topmost", True)
+
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        width = 400
+        height = 300
+
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+
+        self.incidental_window.geometry(f"{width}x{height}+{x}+{y}")
+
+        label = tk.Label(self.incidental_window, image=self.incidental_image)
+        label.image = self.incidental_image
+        label.pack(expand=True)
+
+        self.root.after(1000, self.hide_incidental_visualization)
+
+
+  
+    def hide_incidental_visualization(self):
+
+        if hasattr(self, "incidental_window") and self.incidental_window.winfo_exists():
+            self.incidental_window.destroy()
 
