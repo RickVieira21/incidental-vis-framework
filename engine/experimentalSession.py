@@ -18,6 +18,7 @@ class ExperimentalSession:
         self.trial_already_counted = False
         self.total_errors_overall = 0
         self.constraint_errors_overall = 0
+        self.expiration_errors_overall = 0
 
         self.current_index = 0
         self.conditions = self.load_conditions(participant_id)
@@ -155,13 +156,19 @@ class ExperimentalSession:
 
         self.trial_already_counted = True
 
+        print("")
         print("Trial errors:", self.engine.total_errors)
-        print("Overall before:", self.total_errors_overall)
+        print("Constraint errors:", self.engine.constraint_errors)
+        print("Expiration errors:", self.engine.expiration_errors)
+        print("------------------")
 
+        print("Overall before:", self.total_errors_overall)
         self.total_errors_overall += self.engine.total_errors
         self.constraint_errors_overall += self.engine.constraint_errors
+        self.expiration_errors_overall += self.engine.expiration_errors
 
         print("Overall after:", self.total_errors_overall)
+        print("")
 
         print("Baseline period")
         # Cancelar timer da condição
