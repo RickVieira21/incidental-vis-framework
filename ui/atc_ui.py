@@ -263,11 +263,14 @@ class ATCApp:
 
     def select_flight(self, button, flight):
 
-        # restaurar botão anterior
-        if self.selected_flight_button:
+        # restaurar botão anterior (se ainda existir)
+        if (
+            self.selected_flight_button
+            and self.selected_flight_button.winfo_exists()
+            and self.selected_flight_obj
+        ):
             prev_flight = self.selected_flight_obj
 
-            # se tinha constraint volta a vermelho 
             if prev_flight.required_runway is not None:
                 self.selected_flight_button.config(bg="#ffe6e6")
             else:
@@ -279,7 +282,8 @@ class ATCApp:
         self.selected_flight = flight.callsign
 
         # highlight azul de seleção
-        button.config(bg="#99ccff")
+        if button.winfo_exists():
+            button.config(bg="#99ccff")
 
         self.add_log(f"Selected flight: {flight.callsign}")
 
@@ -304,7 +308,7 @@ class ATCApp:
         btn = self.flight_buttons.pop(flight, None)
         if btn:
             btn.destroy()
-            self.add_log(f"Voo {flight.callsign} expirou.")
+            #self.add_log(f"Flight {flight.callsign} expired.")
 
 
     # -----------------------------------
@@ -313,7 +317,14 @@ class ATCApp:
     def authorize(self):
 
         if not self.selected_flight or not self.selected_runway:
-            self.add_log("Selecione um voo e uma pista primeiro.")
+            self.add_log("Select a flight and a runway first.")
+            return
+
+        if self.selected_flight_obj not in self.engine.flights:
+            self.add_log("Selected flight is no longer available.")
+            self.selected_flight = None
+            self.selected_flight_obj = None
+            self.selected_flight_button = None
             return
 
         runway = self.engine.get_runway(self.selected_runway)
