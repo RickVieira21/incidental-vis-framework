@@ -220,26 +220,26 @@ class ATCApp:
     # --------------------------- FLIGHTS
 
     def add_flight(self, flight):
+        self.add_flight_button(flight)
 
-        base_text = f"{flight.callsign} - ETA {flight.eta}s"
 
-        # Se tiver constraint, acrescentar runway no texto
+    def add_flight_button(self, flight):
+
+        # Base
+        text = f"{flight.callsign} - ETA {flight.eta}s"
+
+        # Constraint (mostrar runway obrigatória)
         if flight.required_runway is not None:
-            text = f"{base_text}     Runway {flight.required_runway}"
-        else:
-            text = base_text
+            text += f" | Runway {flight.required_runway}"
 
-        self.add_flight_button(flight, text)
+        # Indicadores dinâmicos (sem mexer na cor base)
+        if flight.is_priority:
+            text = "⚡ " + text
 
+        if flight.is_delayed:
+            text = "⏳ " + text
 
-    def add_flight_button(self, flight, text):
-
-        # cor normal
-        bg_color = "#e6f0ff"
-
-        # se tiver constraint highlight 
-        if flight.required_runway is not None:
-            bg_color = "#ffe6e6"  
+        bg_color = self.get_flight_base_color(flight)
 
         btn = tk.Button(
             self.scroll.scrollable_frame,
@@ -255,10 +255,25 @@ class ATCApp:
 
         self.flight_buttons[flight] = btn
 
-        btn.config(command=lambda: self.select_flight(btn, flight))
-        btn.pack(fill="x", pady=5)
-                
-        self.flight_buttons[flight] = btn
+
+
+
+    def get_flight_base_color(self, flight):
+
+        # prioridade tem precedência máxima
+        if getattr(flight, "is_priority", False):
+            return "#fff3b0"   # amarelo claro
+
+        # atraso
+        if getattr(flight, "is_delayed", False):
+            return "#d9d9d9"   # cinza
+
+        # constraint
+        if flight.required_runway is not None:
+            return "#ffe6e6"   # vermelho claro
+
+        # normal
+        return "#e6f0ff"       # azul claro
 
 
     def select_flight(self, button, flight):
@@ -269,19 +284,15 @@ class ATCApp:
             and self.selected_flight_button.winfo_exists()
             and self.selected_flight_obj
         ):
-            prev_flight = self.selected_flight_obj
-
-            if prev_flight.required_runway is not None:
-                self.selected_flight_button.config(bg="#ffe6e6")
-            else:
-                self.selected_flight_button.config(bg="#e6f0ff")
+            prev_color = self.get_flight_base_color(self.selected_flight_obj)
+            self.selected_flight_button.config(bg=prev_color)
 
         # atualizar seleção
         self.selected_flight_button = button
         self.selected_flight_obj = flight
         self.selected_flight = flight.callsign
 
-        # highlight azul de seleção
+        # highlight azul mais forte para seleção
         if button.winfo_exists():
             button.config(bg="#99ccff")
 
@@ -310,6 +321,16 @@ class ATCApp:
             btn.destroy()
             #self.add_log(f"Flight {flight.callsign} expired.")
 
+    
+    def refresh_flight_list(self):
+
+        for widget in self.scroll.scrollable_frame.winfo_children():
+            widget.destroy()
+
+        self.flight_buttons.clear()
+
+        for flight in self.engine.flights:
+            self.add_flight_button(flight)
 
     # -----------------------------------
 
@@ -344,16 +365,20 @@ class ATCApp:
             return
 
         # sucesso
-        self.selected_flight_button.destroy()
+        if flight in self.engine.flights:
+            self.engine.flights.remove(flight)
 
         self.add_log(
             f"Flight {flight.callsign} authorized to runway {runway.name}."
         )
 
+        self.refresh_flight_list()
+
         self.selected_runway_rect = None
         self.selected_runway = None
         self.selected_flight = None
         self.selected_flight_button = None
+        self.selected_flight_obj = None
 
 
     def add_log(self, msg):

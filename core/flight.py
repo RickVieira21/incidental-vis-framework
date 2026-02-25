@@ -1,3 +1,5 @@
+import time
+
 class Flight:
     def __init__(self, callsign, eta, priority=False, allowed_runways=None):
         self.callsign = callsign
@@ -7,7 +9,10 @@ class Flight:
         self.allowed_runways = allowed_runways
         self.assigned_runway = None
         self.completed = False
-        self.required_runway = None  # None = sem restrição
+        self.required_runway = None  
+        self.is_priority = False
+        self.is_delayed = False
+        self.spawn_time = time.time()
 
     def tick(self, speed=1):
         if self.assigned_runway is None:
