@@ -4,6 +4,9 @@ from levels.task_complexity import TaskComplexityProfile
 from ui.atc_ui import ATCApp
 from engine.simulation_engine import SimulationEngine
 from engine.event_scheduler import EventScheduler
+import subprocess
+import time
+import os
 
 
 class ExperimentalSession:
@@ -67,12 +70,64 @@ class ExperimentalSession:
         }
 
         return LATIN_SQUARE.get(participant_id, [])
+    
+
+    # ---------------- OPENFACE -----------------
+
+
+    def start_openface_recording(self):
+
+        timestamp = int(time.time())
+        condition_letter = self.conditions[self.current_index]
+
+        filename = f"P{self.participant_id}_{condition_letter}_{timestamp}"
+
+        base_dir = r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\processed"
+
+        participant_dir = os.path.join(base_dir, f"P{self.participant_id}")
+
+        os.makedirs(participant_dir, exist_ok=True)
+
+        self.trial_start_unix = time.time()
+
+        ###
+
+        self.openface_process = subprocess.Popen(
+        [
+            r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
+            "-device", "0",
+            "-out_dir", participant_dir,
+            "-of", filename,
+            "-q",
+            "-novisualise"
+        ],
+        creationflags=subprocess.CREATE_NO_WINDOW
+        )
+
+        print("OpenFace started")
+
+
+    def stop_openface_recording(self):
+
+        if hasattr(self, "openface_process") and self.openface_process:
+            self.openface_process.terminate()
+            self.openface_process = None
+            print("OpenFace stopped")
+
+
+
+    # ---------------- FIM OPENFACE -----------------
 
 
     def start(self):
         self.start_condition()
 
     def start_condition(self):
+        self.start_openface_recording()
+        time.sleep(2)
+
+       # self.scheduler.start()
+
         self.trial_already_counted = False
         if self.current_index >= len(self.conditions):
             print("Experiment finished")
@@ -151,6 +206,8 @@ class ExperimentalSession:
 # ------------- BASELINE -----------------
 
     def start_baseline(self):
+
+        self.stop_openface_recording()
 
         if self.trial_already_counted:
            return
@@ -338,4 +395,5 @@ class ExperimentalSession:
 
         if hasattr(self, "incidental_window") and self.incidental_window.winfo_exists():
             self.incidental_window.destroy()
+
 

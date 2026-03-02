@@ -111,7 +111,7 @@ class SimulationEngine:
             self.apply_priority(flight)
 
         # ordenar por ETA
-        self.flights.sort(key=lambda f: f.eta)
+        #self.flights.sort(key=lambda f: f.eta)
 
         # atualizar controlo temporal
         self.last_modification_time = current_time
