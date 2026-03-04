@@ -130,8 +130,6 @@ class ExperimentalSession:
 
         self.trial_start_unix = time.time()
 
-        ###
-
         self.openface_process = subprocess.Popen(
         [
             r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
@@ -166,8 +164,6 @@ class ExperimentalSession:
         self.start_openface_recording()
         time.sleep(2)
 
-       # self.scheduler.start()
-
         self.trial_already_counted = False
         if self.current_index >= len(self.conditions):
             print("Experiment finished")
@@ -176,10 +172,9 @@ class ExperimentalSession:
         condition = self.conditions[self.current_index]
         print("Starting condition:", condition)
 
-        # aplicar condição ao engine aqui
         self.apply_condition(condition)
 
-        # Criar indicador de condição no canto inferior direito
+        # indicador de condição no canto inferior direito
         self.trial_time_left = self.condition_duration
 
         self.condition_label = tk.Label(
@@ -289,15 +284,13 @@ class ExperimentalSession:
         print("")
 
         print("Baseline period")
-        # Cancelar timer da condição
+
         if hasattr(self, "timer_after_id"):
             self.root.after_cancel(self.timer_after_id)
 
-        # Remover label se existir
         if hasattr(self, "condition_label") and self.condition_label.winfo_exists():
             self.condition_label.destroy()
 
-        # Cancelar visualizações agendadas
         if hasattr(self, "incidental_after_ids"):
             for after_id in self.incidental_after_ids:
                 self.root.after_cancel(after_id)
@@ -382,8 +375,9 @@ class ExperimentalSession:
         self.ui = self.app   
         self.scheduler = EventScheduler(self.root, self.engine, self.app)
 
-        self.scheduler.start()
         self.start_condition()
+        self.scheduler.start()
+        
 
 
 

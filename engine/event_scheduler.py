@@ -1,4 +1,5 @@
 from engine.system_message_manager import SystemMessageManager
+import random
 
 
 class EventScheduler:
@@ -65,9 +66,11 @@ class EventScheduler:
             self.ui.add_flight(flight)
 
         if self.message_manager.should_send_message():
-            #print("sendddddd")
             msg = self.message_manager.generate_message()
             self.ui.add_system_message(msg)
 
-        delay = int(self.engine.cognitive.event_rate * 1000)
+        # delay = int(self.engine.cognitive.event_rate * 1000) #FIXO
+
+        mean_interval = self.engine.cognitive.event_rate
+        delay = int(random.expovariate(1 / mean_interval) * 1000) #DISTIBUICAO VARIAVEL
         self.root.after(delay, self.schedule_next_flight)
