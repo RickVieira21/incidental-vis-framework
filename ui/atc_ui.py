@@ -270,7 +270,7 @@ class ATCApp:
 
         # constraint
         if flight.required_runway is not None:
-            return "#ffe6e6"   # vermelho claro
+            return "#e6f0ff"    # vermelho claro #ffe6e6
 
         # normal
         return "#e6f0ff"       # azul claro

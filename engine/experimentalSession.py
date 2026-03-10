@@ -162,7 +162,7 @@ class ExperimentalSession:
 
     def start_condition(self):
         self.start_openface_recording()
-        time.sleep(2)
+        time.sleep(2.5)
 
         self.trial_already_counted = False
         if self.current_index >= len(self.conditions):
@@ -337,6 +337,12 @@ class ExperimentalSession:
     def update_baseline_countdown(self):
 
         if self.countdown <= 0:
+            # Mostrar Loading em vez de destruir logo
+            self.baseline_label.config(
+                text="Loading...",
+                font=("Arial", 36, "bold")
+            )
+            self.root.update()
             self.baseline_frame.destroy()
             self.next_condition()
             return
