@@ -409,9 +409,26 @@ class ExperimentalSession:
         print(f"Condition {letter} → Cognitive: {cog_level}, Complexity: {comp_level}")
 
 
+
+    def trigger_critical_events(self):
+
+        # gerar 1 ou 2 voos extra
+        for _ in range(2):
+            flight = self.engine.generate_flight()
+            if flight:
+                self.ui.add_flight(flight)
+
+        # gerar mensagem do sistema
+        msg = self.scheduler.message_manager.generate_message()
+        if msg:
+            self.ui.add_system_message(msg)
+
+
 # ---------------- INCIDENTAL VIS -----------------
 
     def show_incidental_visualization(self, iv_number):
+
+        self.trigger_critical_events()
 
         image_path = os.path.join("imgs", f"iv_{iv_number}.png")
         image = tk.PhotoImage(file=image_path)
