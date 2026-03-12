@@ -33,6 +33,7 @@ class ATCApp:
         self.selected_flight_button = None
         self.selected_runway = None
         self.selected_runway_rect = None
+        self.selected_flight_obj = None
 
         self.flight_buttons = {}
         self.runway_timer_texts = {}
@@ -170,9 +171,6 @@ class ATCApp:
 
 
     def select_runway(self, runway_name):
-        if not self.selected_flight_obj:
-            self.add_log("No flight selected.")
-            return
 
         runway = self.engine.get_runway(runway_name)
 
@@ -182,8 +180,7 @@ class ATCApp:
 
         # remover highlight anterior
         if self.selected_runway_rect:
-            prev = self.selected_runway
-            prev_runway = self.engine.get_runway(prev)
+            prev_runway = self.engine.get_runway(self.selected_runway)
             if prev_runway.available:
                 self.canvas.itemconfig(self.selected_runway_rect, fill="#b3ffb3")
 
@@ -194,10 +191,10 @@ class ATCApp:
         self.selected_runway = runway_name
         self.selected_runway_rect = rect
 
-        self.add_log(
-            f"Do you pretend to allocate {self.selected_flight_obj.callsign} "
-            f"to runway {runway_name}? Press Authorize to confirm."
-        )
+        if self.selected_flight_obj:
+            self.add_log(
+                f"Allocate {self.selected_flight_obj.callsign} to runway {runway_name}? Press AUTHORIZE."
+            )
 
 
 
@@ -205,11 +202,18 @@ class ATCApp:
         rect = self.runways[runway.name]
         text_id = self.runway_timer_texts[runway.name]
 
+        # se for a runway selecionada, manter highlight
+        if runway.name == self.selected_runway:
+            self.canvas.itemconfig(rect, fill="#99ccff")
+        else:
+            if runway.available:
+                self.canvas.itemconfig(rect, fill="#b3ffb3")
+            else:
+                self.canvas.itemconfig(rect, fill="red")
+
         if runway.available:
-            self.canvas.itemconfig(rect, fill="#b3ffb3")
             self.canvas.itemconfig(text_id, text="")
         else:
-            self.canvas.itemconfig(rect, fill="red")
             self.canvas.itemconfig(
                 text_id,
                 text=f"Ocupada: {runway.remaining_time}s",
@@ -331,6 +335,12 @@ class ATCApp:
 
         for flight in self.engine.flights:
             self.add_flight_button(flight)
+
+        # restaurar seleção visual
+        if self.selected_flight_obj in self.flight_buttons:
+            btn = self.flight_buttons[self.selected_flight_obj]
+            btn.config(bg="#99ccff")
+            self.selected_flight_button = btn
 
     # -----------------------------------
 
