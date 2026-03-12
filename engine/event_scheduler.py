@@ -51,7 +51,7 @@ class EventScheduler:
                 self.ui.update_flight(flight)
 
         self.engine.maybe_modify_flight()
-        self.ui.refresh_flight_list()
+        #self.ui.refresh_flight_list() (blink)
     
         self.root.after(1000, self.schedule_flight_update)
 

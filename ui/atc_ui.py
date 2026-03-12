@@ -304,19 +304,36 @@ class ATCApp:
 
     
     def update_flight(self, flight):
+
         btn = self.flight_buttons.get(flight)
 
         if not btn or not btn.winfo_exists():
             return
 
+        # -------- TEXTO --------
+
         base_text = f"{flight.callsign} - T-{flight.eta}s"
 
         if flight.required_runway is not None:
-            text = f"{base_text}     Runway {flight.required_runway}"
+            text = f"{base_text} | Runway {flight.required_runway}"
         else:
             text = base_text
 
-        btn.config(text=text)
+        # indicadores texto
+        if flight.is_priority:
+            text = "⚡ " + text
+
+        if flight.is_delayed:
+            text = "⏳ " + text
+
+        # -------- COR --------
+
+        if flight == self.selected_flight_obj:
+            bg_color = "#99ccff"  # manter highlight da seleção
+        else:
+            bg_color = self.get_flight_base_color(flight)
+
+        btn.config(text=text, bg=bg_color)
 
 
     def remove_flight(self, flight):

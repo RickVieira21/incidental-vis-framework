@@ -7,6 +7,8 @@ from engine.event_scheduler import EventScheduler
 import subprocess
 import time
 import os
+import csv
+from bitalino import BITalino
 
 
 class ExperimentalSession:
@@ -117,10 +119,9 @@ class ExperimentalSession:
 
     def start_openface_recording(self):
 
-        timestamp = int(time.time())
         condition_letter = self.conditions[self.current_index]
 
-        filename = f"P{self.participant_id}_{condition_letter}_{timestamp}"
+        filename = f"P{self.participant_id}_{condition_letter}"
 
         base_dir = r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\processed"
 
@@ -153,8 +154,71 @@ class ExperimentalSession:
             print("OpenFace stopped")
 
 
+    # -------------------- EEG ----------------------
 
-    # ---------------- FIM OPENFACE -----------------
+
+    def start_eeg_recording(self):
+
+        self.mac_address = "98:D3:71:FE:51:3B"  
+        self.sampling_rate = 1000 # gera 1000 samples por segundo
+        self.channels = [0]  # canal A1
+
+        self.eeg_device = BITalino(self.mac_address)
+        self.eeg_device.start(self.sampling_rate, self.channels)
+
+        self.eeg_data = []
+        self.eeg_recording = True
+
+        self.eeg_start_time = time.time()
+
+        print("EEG recording started")
+
+
+
+    def stop_eeg_recording(self):
+
+        if hasattr(self, "eeg_device"):
+
+            self.eeg_recording = False
+
+            self.eeg_device.stop()
+            self.eeg_device.close()
+            self.eeg_device = None
+
+            filename = f"P{self.participant_id}_EEG_trial{self.current_index}.csv"
+            filepath = os.path.join("eeg_data", filename)
+
+            os.makedirs("eeg_data", exist_ok=True)
+
+            with open(filepath, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["start_timestamp", self.eeg_start_time])
+                writer.writerow(["sampling_rate", self.sampling_rate])
+                writer.writerow([])
+                writer.writerows(self.eeg_data)
+
+            print("EEG recording saved")
+
+
+
+    def read_eeg_data(self):
+
+        if not hasattr(self, "eeg_device"):
+            return
+        
+        if not getattr(self, "eeg_recording", False):
+            return
+
+        try:
+            samples = self.eeg_device.read(100) # 100 samples 
+            self.eeg_data.extend(samples)
+
+        except Exception as e:
+            print("EEG read warning:", e)
+ 
+        self.root.after(100, self.read_eeg_data) # 1000 ms / 100 ms = 10 chamadas de read_eeg_data por segundo
+
+    # ------------------ FIM EEG --------------------
 
 
     def start(self):
@@ -163,6 +227,10 @@ class ExperimentalSession:
     def start_condition(self):
         self.start_openface_recording()
         time.sleep(2.5)
+
+        self.start_eeg_recording()
+        self.read_eeg_data()
+        time.sleep(0.5)
 
         self.trial_already_counted = False
         if self.current_index >= len(self.conditions):
@@ -248,6 +316,7 @@ class ExperimentalSession:
     def start_baseline(self):
 
         self.stop_openface_recording()
+        self.stop_eeg_recording()
 
         if self.trial_already_counted:
            return
