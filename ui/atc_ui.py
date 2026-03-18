@@ -312,7 +312,7 @@ class ATCApp:
 
         # -------- TEXTO --------
 
-        base_text = f"{flight.callsign} - T-{flight.eta}s"
+        base_text = f"{flight.callsign} - ETA-{flight.eta}s"
 
         if flight.required_runway is not None:
             text = f"{base_text} | Runway {flight.required_runway}"

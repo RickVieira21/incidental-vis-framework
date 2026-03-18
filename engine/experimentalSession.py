@@ -29,8 +29,10 @@ class ExperimentalSession:
         self.current_index = 0
         self.conditions = self.load_conditions(participant_id)
         self.iv_order = self.load_iv_latin_square()
+        self.events = []
 
         self.incidental_image = tk.PhotoImage(file="incidental.png")
+        self.use_eeg = False  # mudar para True com BITalino
 
     def attach(self, engine, ui, scheduler):
         self.engine = engine
@@ -143,6 +145,7 @@ class ExperimentalSession:
         creationflags=subprocess.CREATE_NO_WINDOW
         )
 
+        self.log_event("EEG_START")
         print("OpenFace started")
 
 
@@ -151,6 +154,7 @@ class ExperimentalSession:
         if hasattr(self, "openface_process") and self.openface_process:
             self.openface_process.terminate()
             self.openface_process = None
+            self.log_event("EEG_STOP")
             print("OpenFace stopped")
 
 
@@ -158,6 +162,10 @@ class ExperimentalSession:
 
 
     def start_eeg_recording(self):
+
+        if not self.use_eeg:
+            print("EEG disabled (no device)")
+            return
 
         self.mac_address = "98:D3:71:FE:51:3B"  
         self.sampling_rate = 1000 # gera 1000 samples por segundo
@@ -168,6 +176,7 @@ class ExperimentalSession:
 
         self.eeg_data = []
         self.eeg_recording = True
+        self.log_event("EEG_START")
 
         self.eeg_start_time = time.time()
 
@@ -177,6 +186,9 @@ class ExperimentalSession:
 
     def stop_eeg_recording(self):
 
+        if not self.use_eeg:
+           return
+
         if hasattr(self, "eeg_device"):
 
             self.eeg_recording = False
@@ -184,6 +196,7 @@ class ExperimentalSession:
             self.eeg_device.stop()
             self.eeg_device.close()
             self.eeg_device = None
+            self.log_event("EEG_STOP")
 
             filename = f"P{self.participant_id}_EEG_trial{self.current_index}.csv"
             filepath = os.path.join("eeg_data", filename)
@@ -203,6 +216,9 @@ class ExperimentalSession:
 
     def read_eeg_data(self):
 
+        if not self.use_eeg:
+           return
+
         if not hasattr(self, "eeg_device"):
             return
         
@@ -214,23 +230,37 @@ class ExperimentalSession:
             self.eeg_data.extend(samples)
 
         except Exception as e:
-            print("EEG read warning:", e)
+                if "CONTACTING_DEVICE" in str(e):
+                    self.log_event("EEG_DISCONNECT")
+
+                print("EEG read warning:", e)
  
         self.root.after(100, self.read_eeg_data) # 1000 ms / 100 ms = 10 chamadas de read_eeg_data por segundo
 
-    # ------------------ FIM EEG --------------------
+    # ------------------ LOGS --------------------
 
+    def log_event(self, event_name):
+
+        timestamp = time.time()
+        self.events.append((timestamp, event_name))
+
+
+    # --------------- MAIN CODE ------------------
 
     def start(self):
         self.start_condition()
 
     def start_condition(self):
+        self.events = []
+        
         self.start_openface_recording()
         time.sleep(2.5)
 
         self.start_eeg_recording()
         self.read_eeg_data()
         time.sleep(0.5)
+
+        self.events.append((time.time(), "TRIAL_START"))
 
         self.trial_already_counted = False
         if self.current_index >= len(self.conditions):
@@ -315,6 +345,7 @@ class ExperimentalSession:
 
     def start_baseline(self):
 
+        self.log_event("TRIAL_END")
         self.stop_openface_recording()
         self.stop_eeg_recording()
 
@@ -354,6 +385,11 @@ class ExperimentalSession:
 
         print("Baseline period")
 
+        self.log_event(f"ERROR_TOTAL_{self.engine.total_errors}")
+        self.log_event(f"ERROR_CONSTRAINT_{self.engine.constraint_errors}")
+        self.log_event(f"ERROR_EXPIRATION_{self.engine.expiration_errors}")
+        self.log_event(f"ERROR_ACK_{self.engine.system_ack_errors}")
+
         if hasattr(self, "timer_after_id"):
             self.root.after_cancel(self.timer_after_id)
 
@@ -368,13 +404,22 @@ class ExperimentalSession:
         if hasattr(self, "incidental_window") and self.incidental_window.winfo_exists():
             self.incidental_window.destroy()
 
-        # --------- TRIAL SUMMARY ----------
-        self.ui.add_log("----- TRIAL SUMMARY -----")
-        self.ui.add_log(f"Total Errors: {self.engine.total_errors}")
-        self.ui.add_log(f"Constraint Errors: {self.engine.constraint_errors}")
-        self.ui.add_log(f"Expiration Errors: {self.engine.expiration_errors}")
-        self.ui.add_log(f"System ACK Errors: {self.engine.system_ack_errors}")
-        self.ui.add_log("--------------------------------")
+        # --------- SAVE EVENTS CSV ----------
+
+        filename = f"P{self.participant_id}_events_trial{self.current_index}.csv"
+        filepath = os.path.join("eeg_data", filename)
+
+        os.makedirs("eeg_data", exist_ok=True)
+
+        with open(filepath, "w", newline="") as f:
+            writer = csv.writer(f)
+
+            writer.writerow(["timestamp", "event"])
+
+            for event in self.events:
+                writer.writerow(event)
+
+        print("Events saved")
 
         # Parar scheduler
         self.scheduler.stop()
@@ -517,6 +562,7 @@ class ExperimentalSession:
         y = (screen_height // 2) - (height // 2)  # Centrado verticalmente
 
         self.incidental_window.geometry(f"{width}x{height}+{x}+{y}")
+        self.log_event(f"IV_APPEAR_{iv_number}")
 
         label = tk.Label(self.incidental_window, image=image)
         label.image = image
