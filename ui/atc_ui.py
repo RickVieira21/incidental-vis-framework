@@ -271,7 +271,10 @@ class ATCApp:
         # atraso
         if getattr(flight, "is_delayed", False):
             return "#d9d9d9"   # cinza
-
+        
+        if flight.eta <= 5:
+            return "#ff4d4d"  # vermelho forte
+        
         # constraint
         if flight.required_runway is not None:
             return "#e6f0ff"    # vermelho claro #ffe6e6
