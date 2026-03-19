@@ -8,6 +8,8 @@ import subprocess
 import time
 import os
 import csv
+import pyaudio
+import wave
 from bitalino import BITalino
 
 
@@ -16,23 +18,30 @@ class ExperimentalSession:
     def __init__(self, root, participant_id):
         self.root = root
         self.participant_id = participant_id
-
         self.condition_duration = 120
         self.baseline_duration = 10
 
+        #Errors
         self.trial_already_counted = False
         self.total_errors_overall = 0
         self.constraint_errors_overall = 0
         self.expiration_errors_overall = 0
         self.system_ack_errors_overall = 0
+        self.events = []
 
         self.current_index = 0
         self.conditions = self.load_conditions(participant_id)
         self.iv_order = self.load_iv_latin_square()
-        self.events = []
+
+        #PyAudio
+        self.use_audio = True  # flag audio
+        self.audio = None
+        self.audio_stream = None
+        self.audio_frames = []
+        self.audio_recording = False
 
         self.incidental_image = tk.PhotoImage(file="incidental.png")
-        self.use_eeg = False  # mudar para True com BITalino
+        self.use_eeg = False  # flag eeg
 
     def attach(self, engine, ui, scheduler):
         self.engine = engine
@@ -237,6 +246,94 @@ class ExperimentalSession:
  
         self.root.after(100, self.read_eeg_data) # 1000 ms / 100 ms = 10 chamadas de read_eeg_data por segundo
 
+
+    # -------------------- PYAUDIO ----------------------
+
+    def start_audio_recording(self):
+            
+            #show mics
+            #p = pyaudio.PyAudio()
+
+            #for i in range(p.get_device_count()):
+            #    dev = p.get_device_info_by_index(i)
+            #    print(i, dev["name"])
+
+            if not self.use_audio:
+                print("Audio disabled")
+                return
+
+            self.audio = pyaudio.PyAudio()
+
+            self.audio_stream = self.audio.open(
+                format=pyaudio.paInt16,
+                channels=1,
+                rate=16000,
+                input=True,
+                input_device_index=0, #mic index
+                frames_per_buffer=1024
+            )
+
+            self.audio_frames = []
+            self.audio_recording = True
+
+            self.audio_start_time = time.time()
+
+            self.log_event("AUDIO_START")
+
+            print("Audio recording started")
+
+            self.read_audio_data()
+
+
+    def read_audio_data(self):
+
+        if not self.use_audio:
+            return
+
+        if not self.audio_recording or not self.audio_stream:
+            return
+
+        try:
+            data = self.audio_stream.read(1024, exception_on_overflow=False)
+            self.audio_frames.append(data)
+
+        except Exception as e:
+            print("Audio read warning:", e)
+            self.log_event("AUDIO_ERROR")
+
+        # ~20 updates por segundo 
+        self.root.after(50, self.read_audio_data)
+
+
+    def stop_audio_recording(self):
+
+        if not self.use_audio:
+            return
+
+        if self.audio_stream:
+
+            self.audio_recording = False
+
+            self.audio_stream.stop_stream()
+            self.audio_stream.close()
+            self.audio.terminate()
+
+            self.log_event("AUDIO_STOP")
+
+            filename = f"P{self.participant_id}_audio_trial{self.current_index}.wav"
+            filepath = os.path.join("audio_data", filename)
+
+            os.makedirs("audio_data", exist_ok=True)
+
+            wf = wave.open(filepath, 'wb')
+            wf.setnchannels(1)
+            wf.setsampwidth(self.audio.get_sample_size(pyaudio.paInt16))
+            wf.setframerate(16000)
+            wf.writeframes(b''.join(self.audio_frames))
+            wf.close()
+
+            print("Audio saved")
+
     # ------------------ LOGS --------------------
 
     def log_event(self, event_name):
@@ -260,6 +357,7 @@ class ExperimentalSession:
         self.read_eeg_data()
         time.sleep(0.5)
 
+        self.start_audio_recording()
         self.events.append((time.time(), "TRIAL_START"))
 
         self.trial_already_counted = False
@@ -346,6 +444,7 @@ class ExperimentalSession:
     def start_baseline(self):
 
         self.log_event("TRIAL_END")
+        self.stop_audio_recording()
         self.stop_openface_recording()
         self.stop_eeg_recording()
 
@@ -478,12 +577,6 @@ class ExperimentalSession:
 
         if self.current_index >= len(self.conditions):
             print("Experiment finished")
-
-            print("===== PARTICIPANT SUMMARY =====")
-            print(f"Total Errors (Overall): {self.total_errors_overall}")
-            print(f"Constraint Errors (Overall): {self.constraint_errors_overall}")
-            print("================================")
-
             return
 
         # Recriar engine e UI do zero
