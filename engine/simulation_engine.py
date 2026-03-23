@@ -10,6 +10,9 @@ class SimulationEngine:
         self.complexity = complexity_profile
         self.system_messages = []
 
+        self.total_flights_generated = 0
+        self.total_constrained_flights = 0
+
         self.total_errors = 0
         self.constraint_errors = 0
         self.expiration_errors = 0
@@ -81,7 +84,9 @@ class SimulationEngine:
             # probabilidade de ter constraint 
             if random.random() < 0.4:
                 flight.required_runway = random.choice(self.runways).name
-                
+                self.total_constrained_flights += 1
+        
+        self.total_flights_generated += 1       
         self.flights.append(flight)
 
         return flight

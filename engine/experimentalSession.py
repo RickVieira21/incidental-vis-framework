@@ -488,6 +488,9 @@ class ExperimentalSession:
         self.log_event(f"ERROR_CONSTRAINT_{self.engine.constraint_errors}")
         self.log_event(f"ERROR_EXPIRATION_{self.engine.expiration_errors}")
         self.log_event(f"ERROR_ACK_{self.engine.system_ack_errors}")
+        self.log_event(f"FLIGHTS_TOTAL_{self.engine.total_flights_generated}")
+        self.log_event(f"MESSAGES_TOTAL_{self.scheduler.total_messages_generated}")
+        self.log_event(f"FLIGHTS_CONSTRAINED_{self.engine.total_constrained_flights}")
 
         if hasattr(self, "timer_after_id"):
             self.root.after_cancel(self.timer_after_id)

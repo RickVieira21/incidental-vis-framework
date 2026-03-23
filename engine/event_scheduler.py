@@ -10,6 +10,7 @@ class EventScheduler:
         self.running = False
 
         self.message_manager = SystemMessageManager(engine)
+        self.total_messages_generated = 0
 
     def start(self):
         self.running = True
@@ -68,6 +69,7 @@ class EventScheduler:
         if self.message_manager.should_send_message():
             msg = self.message_manager.generate_message()
             self.ui.add_system_message(msg)
+            self.total_messages_generated += 1
 
         # delay = int(self.engine.cognitive.event_rate * 1000) #FIXO
 
