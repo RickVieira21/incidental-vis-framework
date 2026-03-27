@@ -10,7 +10,6 @@ class EventScheduler:
         self.running = False
 
         self.message_manager = SystemMessageManager(engine)
-        self.total_messages_generated = 0
 
     def start(self):
         self.running = True
@@ -52,7 +51,23 @@ class EventScheduler:
                 self.ui.update_flight(flight)
 
         self.engine.maybe_modify_flight()
-        #self.ui.refresh_flight_list() (blink)
+
+        #loop tempo msgs
+        for msg in list(self.engine.system_messages):
+
+            if msg.check_expired():
+
+                self.engine.total_errors += 1
+                self.engine.expiration_errors += 1
+
+                self.ui.remove_system_message(msg)
+                self.engine.system_messages.remove(msg)
+
+                print(f"Message expired: {msg.text}")
+                self.ui.add_log(f"Message expired: {msg.text}")
+
+                if hasattr(self.engine, "session"):
+                    self.engine.session.log_event(f"MESSAGE_EXPIRED")
     
         self.root.after(1000, self.schedule_flight_update)
 
@@ -69,7 +84,6 @@ class EventScheduler:
         if self.message_manager.should_send_message():
             msg = self.message_manager.generate_message()
             self.ui.add_system_message(msg)
-            self.total_messages_generated += 1
 
         # delay = int(self.engine.cognitive.event_rate * 1000) #FIXO
 

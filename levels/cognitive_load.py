@@ -6,7 +6,7 @@ class CognitiveLoadProfile:
             self.event_rate = 9.0
             self.decision_timeout = None
             self.time_speed = 1
-            self.message_frequency = 0.1
+            self.message_frequency = 0.3
             self.messages = [
                 "System check completed.",
                 "Weather nominal."
@@ -18,7 +18,7 @@ class CognitiveLoadProfile:
               self.event_rate = 6.0
               self.decision_timeout = 10
               self.time_speed = 1
-              self.message_frequency = 0.3
+              self.message_frequency = 0.5
               self.messages = [
                 "Confirm radar contact.",
                 "Acknowledge weather update.",
@@ -31,7 +31,7 @@ class CognitiveLoadProfile:
               self.event_rate = 4.0
               self.decision_timeout = 5
               self.time_speed = 1
-              self.message_frequency = 0.5
+              self.message_frequency = 0.7
               self.messages = [
                 "URGENT: Confirm separation.",
                 "Acknowledge conflict alert.",

@@ -37,6 +37,7 @@ class ATCApp:
 
         self.flight_buttons = {}
         self.runway_timer_texts = {}
+        self.system_message_widgets = {}
 
         main_frame = tk.Frame(root)
         main_frame.pack(fill="both", expand=True)
@@ -451,6 +452,16 @@ class ATCApp:
             font=("Arial", 13, "bold")
         )
         label.pack(side="left", fill="x")
+
+        self.system_message_widgets[message_obj] = row
+
+
+    def remove_system_message(self, message_obj):
+
+        widget = self.system_message_widgets.pop(message_obj, None)
+
+        if widget and widget.winfo_exists():
+            widget.destroy()
 
 
     def acknowledge_message(self, message_obj, var, label):
