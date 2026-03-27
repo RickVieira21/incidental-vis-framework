@@ -15,6 +15,6 @@ class SystemMessageManager:
         messages = self.engine.cognitive.messages
         text = random.choice(messages)
         self.total_messages_generated += 1
-        print(self.total_messages_generated)
+        #print(self.total_messages_generated)
         return SystemMessage(text)
 

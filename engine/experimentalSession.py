@@ -45,6 +45,7 @@ class ExperimentalSession:
 
     def attach(self, engine, ui, scheduler):
         self.engine = engine
+        self.engine.session = self
         self.ui = ui
         self.scheduler = scheduler
 
@@ -587,6 +588,7 @@ class ExperimentalSession:
         complexity = self.engine.complexity
 
         self.engine = SimulationEngine(cognitive, complexity)
+        self.engine.session = self
         self.app = ATCApp(self.root, self.engine)
         self.ui = self.app   
         self.scheduler = EventScheduler(self.root, self.engine, self.app)

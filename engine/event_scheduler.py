@@ -1,3 +1,5 @@
+import time
+
 from engine.system_message_manager import SystemMessageManager
 import random
 
@@ -47,6 +49,10 @@ class EventScheduler:
                 self.engine.expiration_errors += 1
                 self.ui.remove_flight(flight)
                 self.engine.flights.remove(flight)
+                decision_time = time.time() - flight.spawn_time
+                self.engine.session.log_event(
+                    f"FLIGHT_EXPIRED_{decision_time:.3f}_{flight.callsign}"
+                )
             else:
                 self.ui.update_flight(flight)
 

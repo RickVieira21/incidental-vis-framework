@@ -1,4 +1,5 @@
 import tkinter as tk
+import time
 from tkinter import ttk
 
 class ScrollableFrame(ttk.Frame):
@@ -381,6 +382,7 @@ class ATCApp:
 
         runway = self.engine.get_runway(self.selected_runway)
         flight = self.selected_flight_obj
+        decision_time = time.time() - flight.spawn_time
 
         result = self.engine.assign_flight_to_runway(flight, runway)
 
@@ -398,6 +400,7 @@ class ATCApp:
         # sucesso
         if flight in self.engine.flights:
             self.engine.flights.remove(flight)
+            self.engine.session.log_event(f"FLIGHT_DT_{decision_time:.3f}_{flight.callsign}")
 
         self.add_log(
             f"Flight {flight.callsign} authorized to runway {runway.name}."
@@ -475,7 +478,9 @@ class ATCApp:
             font=("Arial", 13)
         )
 
+        rt = message_obj.reaction_time
         print("Reaction time:", message_obj.reaction_time)
+        self.engine.session.log_event(f"MESSAGE_RT_{rt:.3f}")
 
 
 
