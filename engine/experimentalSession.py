@@ -15,11 +15,12 @@ from bitalino import BITalino
 
 class ExperimentalSession:
 
-    def __init__(self, root, participant_id):
+    def __init__(self, root, participant_id, practice=False):
         self.root = root
         self.participant_id = participant_id
         self.condition_duration = 120
         self.baseline_duration = 10
+        self.is_practice = practice
 
         #Errors
         self.trial_already_counted = False
@@ -131,11 +132,11 @@ class ExperimentalSession:
 
     def start_openface_recording(self):
 
-        condition_letter = self.conditions[self.current_index]
+        prefix = "PRACTICE_" if self.is_practice else ""
+        filename = f"P{self.participant_id}_{prefix}Openface{self.current_index}"
 
-        filename = f"P{self.participant_id}_{condition_letter}"
-
-        base_dir = r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\processed"
+        #base_dir = r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\processed"
+        base_dir = os.path.join("eye_data", filename)
 
         participant_dir = os.path.join(base_dir, f"P{self.participant_id}")
 
@@ -208,7 +209,9 @@ class ExperimentalSession:
             self.eeg_device = None
             self.log_event("EEG_STOP")
 
-            filename = f"P{self.participant_id}_EEG_trial{self.current_index}.csv"
+            prefix = "PRACTICE_" if self.is_practice else ""
+            filename = f"P{self.participant_id}_{prefix}EEG_trial{self.current_index}.csv"
+
             filepath = os.path.join("eeg_data", filename)
 
             os.makedirs("eeg_data", exist_ok=True)
@@ -321,7 +324,9 @@ class ExperimentalSession:
 
             self.log_event("AUDIO_STOP")
 
-            filename = f"P{self.participant_id}_audio_trial{self.current_index}.wav"
+            prefix = "PRACTICE_" if self.is_practice else ""
+            filename = f"P{self.participant_id}_{prefix}audio_trial{self.current_index}.wav"
+
             filepath = os.path.join("audio_data", filename)
 
             os.makedirs("audio_data", exist_ok=True)
@@ -449,6 +454,12 @@ class ExperimentalSession:
         self.stop_openface_recording()
         self.stop_eeg_recording()
 
+
+        if self.is_practice:
+            print("Practice finished")
+            #self.root.destroy()  
+            return
+
         if self.trial_already_counted:
            return
 
@@ -465,6 +476,7 @@ class ExperimentalSession:
         self.engine.system_ack_errors += num_unacked
         self.engine.total_errors += num_unacked
 
+        '''
         #PER TRIAL
         print("")
         print("Trial errors:", self.engine.total_errors)
@@ -482,6 +494,7 @@ class ExperimentalSession:
 
         print("Overall after:", self.total_errors_overall)
         print("")
+        '''
 
         print("Baseline period")
 
@@ -509,10 +522,12 @@ class ExperimentalSession:
 
         # --------- SAVE EVENTS CSV ----------
 
-        filename = f"P{self.participant_id}_events_trial{self.current_index}.csv"
-        filepath = os.path.join("eeg_data", filename)
+        prefix = "PRACTICE_" if self.is_practice else ""
+        filename = f"P{self.participant_id}_{prefix}events_trial{self.current_index}.csv"
+        
+        filepath = os.path.join("events_data", filename)
 
-        os.makedirs("eeg_data", exist_ok=True)
+        os.makedirs("events_data", exist_ok=True)
 
         with open(filepath, "w", newline="") as f:
             writer = csv.writer(f)

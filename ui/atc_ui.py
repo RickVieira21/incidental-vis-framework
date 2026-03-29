@@ -366,7 +366,6 @@ class ATCApp:
 
     # -----------------------------------
 
-
     def authorize(self):
 
         if not self.selected_flight or not self.selected_runway:
@@ -429,7 +428,8 @@ class ATCApp:
         label.pack(side="left", fill="x")
 
 
-    
+    #System Messages
+
     def add_system_message(self, message_obj):
         # Guardar no engine
         self.engine.system_messages.append(message_obj)
@@ -482,7 +482,8 @@ class ATCApp:
         print("Reaction time:", message_obj.reaction_time)
         self.engine.session.log_event(f"MESSAGE_RT_{rt:.3f}")
 
-
+    # -----------------------------------
+        
 
 class StartMenu:
     def __init__(self, root, on_start_callback):
@@ -527,10 +528,26 @@ class StartMenu:
             command=self.start_experiment
         ).pack(pady=40)
 
+
+        tk.Button(
+            self.frame,
+            text="PRACTICE",
+            font=("Arial", 14),
+            width=12,
+            height=2,
+            bg="#cccccc",
+            command=self.start_practice
+        ).pack(pady=10)
+
+
     def start_experiment(self):
         participant_id = self.participant_var.get()
         self.frame.destroy()
         self.on_start(participant_id)
 
+    def start_practice(self):
+        participant_id = self.participant_var.get()
+        self.frame.destroy()
+        self.on_start(participant_id, practice=True)
 
 

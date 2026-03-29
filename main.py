@@ -13,14 +13,14 @@ def main():
     root.geometry("1450x820")
     root.title("ATC Experiment")
 
-    def start_experiment(participant_id):
+    def start_experiment(participant_id, practice=False):
 
         # Limpar tudo 
         for widget in root.winfo_children():
             widget.destroy()
 
         # Criar sessão
-        session = ExperimentalSession(root, participant_id)
+        session = ExperimentalSession(root, participant_id, practice)
 
         # Perfis iniciais (serão alterados pela sessão)
         cognitive = CognitiveLoadProfile("LOW")
