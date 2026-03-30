@@ -1,14 +1,19 @@
 import time
+import random
 
 class SystemMessage:
-    def __init__(self, text):
+    def __init__(self, text, cognitive):
         self.text = text
         self.created_at = time.time()
         self.acknowledged = False
+        self.cognitive = cognitive
         self.ack_time = None
 
         self.expired = False
         self.expired_at = None
+
+        eta_min, eta_max = self.cognitive.eta_range
+        self.timeout = random.randint(eta_min, eta_max)
 
 
     def acknowledge(self):
@@ -25,9 +30,7 @@ class SystemMessage:
         if self.acknowledged or self.expired:
             return False
 
-        timeout = getattr(self, "timeout", 10)  # default 10s
-
-        if time.time() - self.created_at >= timeout:
+        if time.time() - self.created_at >= self.timeout:
             self.expired = True
             self.expired_at = time.time()
             return True

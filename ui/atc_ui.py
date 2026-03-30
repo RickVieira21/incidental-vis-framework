@@ -49,6 +49,7 @@ class ATCApp:
         self.flight_buttons = {}
         self.runway_timer_texts = {}
         self.system_message_widgets = {}
+        self.update_message_timers()
 
         main_frame = tk.Frame(root)
         main_frame.pack(fill="both", expand=True)
@@ -466,15 +467,37 @@ class ATCApp:
         )
         label.pack(side="left", fill="x")
 
-        self.system_message_widgets[message_obj] = row
+        self.system_message_widgets[message_obj] = {
+            "row": row,
+            "label": label
+        }
+
+    
+    def update_message_timers(self):
+
+        for msg, widgets in list(self.system_message_widgets.items()):
+
+            if msg.expired:
+                continue
+
+            remaining = int(msg.timeout - (time.time() - msg.created_at))
+            remaining = max(0, remaining)
+
+            widgets["label"].config(
+                text=f"[SYSTEM] {msg.text} ({remaining}s)"
+            )
+
+        self.root.after(1000, self.update_message_timers)
 
 
     def remove_system_message(self, message_obj):
+        widget_dict = self.system_message_widgets.pop(message_obj, None)
 
-        widget = self.system_message_widgets.pop(message_obj, None)
+        if widget_dict:
+            row = widget_dict.get("row")
 
-        if widget and widget.winfo_exists():
-            widget.destroy()
+            if row and row.winfo_exists():
+                row.destroy()
 
 
     def acknowledge_message(self, message_obj, var, label):

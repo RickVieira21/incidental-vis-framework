@@ -65,18 +65,12 @@ class SimulationEngine:
         airlines = ["TAP", "EZY", "RYR", "QTR"]
         generatedCallsign = random.choice(airlines) + str(random.randint(100, 999)) 
         
-        if self.complexity.max_flights == 5:
-            generatedETA = random.randint(22, 30)
-
-        elif self.complexity.max_flights == 10:
-            generatedETA = random.randint(18, 26)
-
-        else:
-            generatedETA = random.randint(14, 22)
+        eta_min, eta_max = self.cognitive.eta_range
+        generatedETA = random.randint(eta_min, eta_max)
 
         flight = Flight(
             callsign=generatedCallsign,
-            eta = generatedETA,
+            eta=generatedETA,
             priority=self.complexity.has_priorities
         )
 
