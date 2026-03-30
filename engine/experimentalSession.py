@@ -161,7 +161,8 @@ class ExperimentalSession:
 
         self.openface_process = subprocess.Popen( #CHANGE ABSOLUTE PATH
         [
-            r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
+            #r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
+            r"C:\Users\ricvi\Documents\Fcul\tese\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
             "-device", "0",
             "-out_dir", participant_dir,
             "-of", filename,
@@ -374,7 +375,6 @@ class ExperimentalSession:
         
         self.start_openface_recording()
         time.sleep(2.5)
-        self.hide_openface_window()
 
         self.start_eeg_recording()
         self.read_eeg_data()
@@ -446,6 +446,8 @@ class ExperimentalSession:
 
         if self.trial_time_left < 0:
             return
+        
+        self.hide_openface_window()
 
         minutes = self.trial_time_left // 60
         seconds = self.trial_time_left % 60
