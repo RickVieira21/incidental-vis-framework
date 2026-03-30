@@ -144,7 +144,7 @@ class ExperimentalSession:
 
         self.trial_start_unix = time.time()
 
-        self.openface_process = subprocess.Popen(
+        self.openface_process = subprocess.Popen( #CHANGE ABSOLUTE PATH
         [
             r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
             "-device", "0",
@@ -156,7 +156,7 @@ class ExperimentalSession:
         creationflags=subprocess.CREATE_NO_WINDOW
         )
 
-        self.log_event("EEG_START")
+        self.log_event("OPENFACE_START")
         print("OpenFace started")
 
 
@@ -165,7 +165,7 @@ class ExperimentalSession:
         if hasattr(self, "openface_process") and self.openface_process:
             self.openface_process.terminate()
             self.openface_process = None
-            self.log_event("EEG_STOP")
+            self.log_event("OPENFACE_STOP")
             print("OpenFace stopped")
 
 
