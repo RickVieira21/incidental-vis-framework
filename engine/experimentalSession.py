@@ -125,7 +125,11 @@ class ExperimentalSession:
             28: [28,29,27,30,26,31,25,32,24,33,23,34,22,35,21,36,20,1,19,2,18,3,17,4,16,5,15,6,14,7,13,8,12,9,11,10],
             29: [29,30,28,31,27,32,26,33,25,34,24,35,23,36,22,1,21,2,20,3,19,4,18,5,17,6,16,7,15,8,14,9,13,10,12,11],
             30: [30,31,29,32,28,33,27,34,26,35,25,36,24,1,23,2,22,3,21,4,20,5,19,6,18,7,17,8,16,9,15,10,14,11,13,12],
+            31: [31,32,30,33,29,34,28,35,27,36,26,1,25,2,24,3,23,4,22,5,21,6,20,7,19,8,18,9,17,10,16,11,15,12,14,13],
         }
+
+        if self.is_practice:
+            return LATIN_IV[31]
 
         return LATIN_IV.get(self.participant_id, [])
     
@@ -642,6 +646,10 @@ class ExperimentalSession:
         }
 
         cog_level, comp_level = mapping[letter]
+
+        if self.is_practice:
+            cog_level = "LOW"
+            comp_level = "HIGH"
 
         self.engine.cognitive = CognitiveLoadProfile(cog_level)
         self.engine.complexity = TaskComplexityProfile(comp_level)

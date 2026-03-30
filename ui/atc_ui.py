@@ -480,10 +480,15 @@ class ATCApp:
             if msg.expired:
                 continue
 
+            label = widgets["label"]
+
+            if not label.winfo_exists():
+                continue
+
             remaining = int(msg.timeout - (time.time() - msg.created_at))
             remaining = max(0, remaining)
 
-            widgets["label"].config(
+            label.config(
                 text=f"[SYSTEM] {msg.text} ({remaining}s)"
             )
 
