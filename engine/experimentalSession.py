@@ -10,6 +10,9 @@ import os
 import csv
 import pyaudio
 import wave
+import win32gui
+import win32con
+import time
 from bitalino import BITalino
 
 
@@ -129,6 +132,14 @@ class ExperimentalSession:
 
     # ---------------- OPENFACE -----------------
 
+    def hide_openface_window(self):
+        def enum_handler(hwnd, ctx):
+            if "tracking result" in win32gui.GetWindowText(hwnd):
+                win32gui.ShowWindow(hwnd, win32con.SW_HIDE)
+
+        win32gui.EnumWindows(enum_handler, None)
+
+
 
     def start_openface_recording(self):
 
@@ -167,6 +178,7 @@ class ExperimentalSession:
             self.openface_process = None
             self.log_event("OPENFACE_STOP")
             print("OpenFace stopped")
+    
 
 
     # -------------------- EEG ----------------------
@@ -358,6 +370,7 @@ class ExperimentalSession:
         
         self.start_openface_recording()
         time.sleep(2.5)
+        self.hide_openface_window()
 
         self.start_eeg_recording()
         self.read_eeg_data()

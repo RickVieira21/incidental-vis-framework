@@ -28,7 +28,17 @@ class ATCApp:
         self.root = root
         self.engine = engine
         self.root.title("ATC Simulator")
-        self.root.geometry("1450x820")
+        #self.root.geometry("1450x820") #FIXO
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        # metade do ecrã (lado esquerdo)
+        width = int(screen_width * 0.75)
+        height = int(screen_height * 0.93)
+
+        # posição: x=0 (esquerda), y=0 (topo)
+        self.root.geometry(f"{width}x{height}+0+0")
+        self.root.resizable(False, False)
                 
         self.selected_flight = None
         self.selected_flight_button = None
@@ -232,7 +242,7 @@ class ATCApp:
     def add_flight_button(self, flight):
 
         # Base
-        text = f"{flight.callsign} - ETA {flight.eta}s"
+        text = f"ETA {flight.eta}s - {flight.callsign}"
 
         # Constraint (mostrar runway obrigatória)
         if flight.required_runway is not None:
@@ -317,7 +327,7 @@ class ATCApp:
 
         # -------- TEXTO --------
 
-        base_text = f"{flight.callsign} - ETA-{flight.eta}s"
+        base_text = f"ETA {flight.eta:02d}s - {flight.callsign}"
 
         if flight.required_runway is not None:
             text = f"{base_text} | Runway {flight.required_runway}"
