@@ -161,8 +161,8 @@ class ExperimentalSession:
 
         self.openface_process = subprocess.Popen( #CHANGE ABSOLUTE PATH
         [
-            #r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
-            r"C:\Users\ricvi\Documents\Fcul\tese\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
+            r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
+            #r"C:\Users\ricvi\Documents\Fcul\tese\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
             "-device", "0",
             "-out_dir", participant_dir,
             "-of", filename,

@@ -2,14 +2,14 @@ class TaskComplexityProfile:
     def __init__(self, level):
         if level == "LOW":
             self.max_flights = 5
-            self.runway_occupation_time = 8
+            self.runway_occupation_time = 4
             self.has_priorities = False
             self.has_constraints = False
             self.delay_probability = 0.0
             self.system_state_changes = False
 
         elif level == "MEDIUM":
-            self.max_flights = 10
+            self.max_flights = 6
             self.runway_occupation_time = 12
             self.has_priorities = True
             self.has_constraints = False
@@ -17,7 +17,7 @@ class TaskComplexityProfile:
             self.system_state_changes = False
 
         elif level == "HIGH":
-            self.max_flights = 20
+            self.max_flights = 8
             self.runway_occupation_time = 18
             self.has_priorities = True
             self.has_constraints = True

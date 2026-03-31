@@ -93,6 +93,6 @@ class EventScheduler:
 
         # delay = int(self.engine.cognitive.event_rate * 1000) #FIXO
 
-        mean_interval = self.engine.cognitive.event_rate
-        delay = int(random.expovariate(1 / mean_interval) * 1000) #DISTIBUICAO VARIAVEL
+        mean_interval = self.engine.cognitive.event_interval
+        delay = int(random.expovariate(1 / mean_interval) * 1000) #Exponencial 
         self.root.after(delay, self.schedule_next_flight)

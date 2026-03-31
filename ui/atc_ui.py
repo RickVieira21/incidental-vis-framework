@@ -108,6 +108,10 @@ class ATCApp:
 
         # Canvas para permitir scroll interno
         canvas = tk.Canvas(content_frame, bg="white", highlightthickness=0)
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
         scrollbar = ttk.Scrollbar(content_frame, orient="vertical", command=canvas.yview)
 
         scrollable_area = tk.Frame(canvas, bg="white")
