@@ -233,7 +233,7 @@ class ATCApp:
         else:
             self.canvas.itemconfig(
                 text_id,
-                text=f"Ocupada: {runway.remaining_time}s",
+                text=f"Occupied: {runway.remaining_time}s",
                 fill="white"
             )
 

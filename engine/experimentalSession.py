@@ -18,12 +18,13 @@ from bitalino import BITalino
 
 class ExperimentalSession:
 
-    def __init__(self, root, participant_id, practice=False):
+    def __init__(self, root, participant_id, on_start_callback, practice=False):
         self.root = root
         self.participant_id = participant_id
         self.condition_duration = 120
         self.baseline_duration = 10
         self.is_practice = practice
+        self.on_start_callback = on_start_callback
 
         #Errors
         self.trial_already_counted = False
@@ -46,6 +47,7 @@ class ExperimentalSession:
 
         self.incidental_image = tk.PhotoImage(file="incidental.png")
         self.use_eeg = False  # flag eeg
+        self.root.bind("<Escape>", self.on_escape)
 
     def attach(self, engine, ui, scheduler):
         self.engine = engine
@@ -430,10 +432,11 @@ class ExperimentalSession:
                 lambda n=iv_number: self.show_incidental_visualization(n)
             )
 
-        self.incidental_after_ids.append(after_id)
+            self.incidental_after_ids.append(after_id)
 
         # timer 120s
-        self.root.after(self.condition_duration * 1000, self.start_baseline)
+        if not self.is_practice:
+            self.root.after(self.condition_duration * 1000, self.start_baseline)
 
 
     def update_trial_timer(self):
@@ -445,22 +448,58 @@ class ExperimentalSession:
             return
 
         if self.trial_time_left < 0:
-            return
+            if self.is_practice:
+                self.trial_time_left = self.condition_duration  # reset loop
+            else:
+                return
         
         self.hide_openface_window()
 
         minutes = self.trial_time_left // 60
         seconds = self.trial_time_left % 60
 
-        self.condition_label.config(
-            text=f"Condition {self.current_index + 1} / {len(self.conditions)}\n"
-                f"Time left: {minutes:02d}:{seconds:02d}"
-        )
-
+        if self.is_practice:
+            self.condition_label.config(
+                text=f"Practice Mode\nTime: {minutes:02d}:{seconds:02d}"
+            )
+        else:
+            self.condition_label.config(
+                text=f"Condition {self.current_index + 1} / {len(self.conditions)}\n"
+                    f"Time left: {minutes:02d}:{seconds:02d}"
+            )
+            
         self.trial_time_left -= 1
 
         if self.trial_time_left >= 0:
             self.timer_after_id = self.root.after(1000, self.update_trial_timer)
+
+        
+    def on_escape(self, event=None):
+
+        if hasattr(self, "incidental_after_ids"):
+            for after_id in self.incidental_after_ids:
+                try:
+                    self.root.after_cancel(after_id)
+                except:
+                    pass
+
+        print("ESC pressed - returning to menu")
+
+        # parar tudo
+        self.stop_audio_recording()
+        self.stop_openface_recording()
+        self.stop_eeg_recording()
+
+        if hasattr(self, "scheduler"):
+            self.scheduler.stop()
+
+        # limpar UI atual
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # voltar ao menu
+        from ui.atc_ui import StartMenu
+        StartMenu(self.root, self.on_start_callback)
 
 
 
@@ -677,6 +716,12 @@ class ExperimentalSession:
 # ---------------- INCIDENTAL VIS -----------------
 
     def show_incidental_visualization(self, iv_number):
+
+        if not hasattr(self, "ui") or not self.ui:
+            return
+
+        if not self.root.winfo_exists():
+            return
 
         self.trigger_critical_events()
 

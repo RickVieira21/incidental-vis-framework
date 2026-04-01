@@ -20,7 +20,7 @@ def main():
             widget.destroy()
 
         # Criar sessão
-        session = ExperimentalSession(root, participant_id, practice)
+        session = ExperimentalSession(root, participant_id, start_experiment, practice)
 
         # Perfis iniciais (serão alterados pela sessão)
         cognitive = CognitiveLoadProfile("LOW")
