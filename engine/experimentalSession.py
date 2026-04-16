@@ -505,6 +505,29 @@ class ExperimentalSession:
 
 # ------------- BASELINE -----------------
 
+    def show_end_screen(self):
+
+        print("Experiment finished")
+
+        # limpar UI
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # frame final
+        end_frame = tk.Frame(self.root, bg="white")
+        end_frame.pack(fill="both", expand=True)
+
+        label = tk.Label(
+            end_frame,
+            text="Thank you for your participation!",
+            font=("Arial", 28, "bold"),
+            bg="white",
+            justify="center"
+        )
+        label.pack(expand=True)
+
+
+
     def start_baseline(self):
 
         self.log_event("TRIAL_END")
@@ -638,7 +661,7 @@ class ExperimentalSession:
             return
 
         self.baseline_label.config(
-            text=f"Baseline Period\n\n{self.countdown}"
+            text=f"Take some time to rest!\n\n{self.countdown}"
         )
 
         self.countdown -= 1
@@ -653,7 +676,7 @@ class ExperimentalSession:
         self.current_index += 1
 
         if self.current_index >= len(self.conditions):
-            print("Experiment finished")
+            self.show_end_screen()
             return
 
         # Recriar engine e UI do zero

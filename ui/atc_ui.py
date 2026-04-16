@@ -50,6 +50,8 @@ class ATCApp:
         self.runway_timer_texts = {}
         self.system_message_widgets = {}
         self.update_message_timers()
+        self.runways = {}
+        self.runway_timer_texts = {}
 
         main_frame = tk.Frame(root)
         main_frame.pack(fill="both", expand=True)
@@ -61,16 +63,26 @@ class ATCApp:
         top_frame.pack(fill="both", expand=True)
 
         top_frame.grid_rowconfigure(0, weight=1)
-        top_frame.grid_columnconfigure(0, weight=3)  # runways mais largo
-        top_frame.grid_columnconfigure(1, weight=2)  # flight list mais estreita
+        top_frame.grid_columnconfigure(0, weight=3)  
+        top_frame.grid_columnconfigure(1, weight=2)  
 
         # LEFT: RUNWAYS
         self.runway_frame = tk.Frame(top_frame, bg="#e6e6e6")
         self.runway_frame.grid(row=0, column=0, sticky="nsew", padx=10, pady=10)
 
-        tk.Label(self.runway_frame, text="Runways", font=("Arial", 18, "bold")).pack(pady=5)
+        tk.Label(
+            self.runway_frame,
+            text="Runways",
+            font=("Arial", 17, "bold"),
+            bg="#e6e6e6"
+        ).pack(pady=5)
 
-        self.canvas = tk.Canvas(self.runway_frame, bg="white")
+        self.canvas = tk.Canvas(
+            self.runway_frame,
+            bg=self.runway_frame.cget("bg"),
+            highlightthickness=0,
+            bd=0
+        )
         self.canvas.pack(fill="both", expand=True)
 
         self.draw_runways()
@@ -79,7 +91,11 @@ class ATCApp:
         flight_frame = tk.Frame(top_frame)
         flight_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
 
-        tk.Label(flight_frame, text="Flight Queue", font=("Arial", 16, "bold")).pack(pady=5)
+        tk.Label(
+            flight_frame,
+            text="Flight Queue",
+            font=("Arial", 16, "bold")
+        ).pack(pady=5, padx=(0, 42))
 
         self.scroll = ScrollableFrame(flight_frame)
         self.scroll.pack(fill="both", expand=True)
@@ -150,31 +166,44 @@ class ATCApp:
     # --------------------------- RUNWAYS
 
     def draw_runways(self):
+        self.canvas.delete("all")  # limpa antes de redesenhar
+
+        canvas_width = self.canvas.winfo_width()
+
+        if canvas_width == 1:  # ainda não renderizado
+            self.canvas.after(50, self.draw_runways)
+            return
+
+        lane_width = 700
         lane_height = 130
         spacing = 35
+
+        x1 = (canvas_width - lane_width) // 2
+        x2 = x1 + lane_width
+
         y = 20
 
         self.runways = {}
 
         for name in ["A", "B", "C"]:
             rect = self.canvas.create_rectangle(
-                60, y, 750, y + lane_height,
+                x1, y, x2, y + lane_height,
                 fill="#b3ffb3", outline="black", width=2
             )
 
             self.canvas.create_text(
-                80, y + lane_height/2,
+                x1 + 20, y + lane_height / 2,
                 text=f"Runway {name}",
                 anchor="w",
                 font=("Arial", 16, "bold")
             )
 
             text_id = self.canvas.create_text(
-            650, y + lane_height/2,
-            text="",
-            anchor="e",
-            font=("Arial", 14, "bold"),
-            fill="red"
+                x2 - 20, y + lane_height / 2,
+                text="",
+                anchor="e",
+                font=("Arial", 14, "bold"),
+                fill="red"
             )
 
             self.runway_timer_texts[name] = text_id
@@ -216,6 +245,9 @@ class ATCApp:
 
 
     def update_runway(self, runway):
+      
+        if not hasattr(self, "runways") or runway.name not in self.runways:
+            return
         rect = self.runways[runway.name]
         text_id = self.runway_timer_texts[runway.name]
 
