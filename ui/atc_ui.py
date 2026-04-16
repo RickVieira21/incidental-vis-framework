@@ -246,19 +246,13 @@ class ATCApp:
 
     def add_flight_button(self, flight):
 
-        # Base
-        text = f"ETA {flight.eta}s - {flight.callsign}"
+        offset = 43
 
-        # Constraint (mostrar runway obrigatória)
-        if flight.required_runway is not None:
-            text += f" | Runway {flight.required_runway}"
+        eta_part = f"ETA {flight.eta}s"
+        callsign_part = f"{flight.callsign}"
+        runway_part = f"Runway {flight.required_runway}" if flight.required_runway else ""
 
-        # Indicadores dinâmicos (sem mexer na cor base)
-        if flight.is_priority:
-            text = "⚡ " + text
-
-        if flight.is_delayed:
-            text = "⏳ " + text
+        text = f"{' ' * offset}{eta_part} - {callsign_part} {runway_part}"
 
         bg_color = self.get_flight_base_color(flight)
 
@@ -268,7 +262,8 @@ class ATCApp:
             font=("Arial", 14),
             bg=bg_color,
             width=55,
-            height=2
+            height=2,
+            anchor="w"
         )
 
         btn.config(command=lambda: self.select_flight(btn, flight))
@@ -280,17 +275,18 @@ class ATCApp:
 
 
     def get_flight_base_color(self, flight):
-
-        # prioridade tem precedência máxima
+        
+        #<5 sec
+        if flight.eta <= 5:
+            return "#ff4d4d"  # vermelho forte
+        
+        # priority
         if getattr(flight, "is_priority", False):
             return "#fff3b0"   # amarelo claro
 
-        # atraso
+        # delay
         if getattr(flight, "is_delayed", False):
             return "#d9d9d9"   # cinza
-        
-        if flight.eta <= 5:
-            return "#ff4d4d"  # vermelho forte
         
         # constraint
         if flight.required_runway is not None:
@@ -320,7 +316,7 @@ class ATCApp:
         if button.winfo_exists():
             button.config(bg="#99ccff")
 
-        self.add_log(f"Selected flight: {flight.callsign}")
+        #self.add_log(f"Selected flight: {flight.callsign}")
 
     
     def update_flight(self, flight):
@@ -332,19 +328,13 @@ class ATCApp:
 
         # -------- TEXTO --------
 
-        base_text = f"ETA {flight.eta:02d}s - {flight.callsign}"
+        offset = 43
 
-        if flight.required_runway is not None:
-            text = f"{base_text} | Runway {flight.required_runway}"
-        else:
-            text = base_text
+        eta_part = f"ETA {flight.eta}s"
+        callsign_part = f"{flight.callsign}"
+        runway_part = f"Runway {flight.required_runway}" if flight.required_runway else ""
 
-        # indicadores texto
-        if flight.is_priority:
-            text = "⚡ " + text
-
-        if flight.is_delayed:
-            text = "⏳ " + text
+        text = f"{' ' * offset}{eta_part} - {callsign_part} {runway_part}"
 
         # -------- COR --------
 

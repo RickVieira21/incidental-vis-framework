@@ -615,7 +615,7 @@ class ExperimentalSession:
 
         self.baseline_label = tk.Label(
             self.baseline_frame,
-            text=f"Baseline Period\n\n{self.countdown}",
+            text=f"Take some time to rest!\n\n{self.countdown}",
             font=("Arial", 32, "bold"),
             bg="white"
         )
