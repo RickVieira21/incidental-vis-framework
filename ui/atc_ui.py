@@ -221,6 +221,8 @@ class ATCApp:
         runway = self.engine.get_runway(runway_name)
 
         if not runway.available:
+            msg = f"Runway {runway.name} is already occupied."
+            self.show_error_popup(msg)
             self.add_log(f"Runway {runway_name} is already occupied.")
             return
 
@@ -406,11 +408,15 @@ class ATCApp:
     def authorize(self):
 
         if not self.selected_flight or not self.selected_runway:
-            self.add_log("Select a flight and a runway first.")
+            #self.add_log("Select a flight and a runway first.")
+            msg = f"Select a flight and a runway first."
+            self.show_error_popup(msg)
             return
 
         if self.selected_flight_obj not in self.engine.flights:
-            self.add_log("Selected flight is no longer available.")
+            #self.add_log("Selected flight is no longer available.")
+            msg = f"Selected flight is no longer available."
+            self.show_error_popup(msg)
             self.selected_flight = None
             self.selected_flight_obj = None
             self.selected_flight_button = None
@@ -423,17 +429,17 @@ class ATCApp:
         result = self.engine.assign_flight_to_runway(flight, runway)
 
         if result == "CONSTRAINT_VIOLATION":
-            self.add_log(
-                f"Constraint violation: {flight.callsign} "
-                f"must use Runway {flight.required_runway}"
-            )
+            msg = f"Constraint violation: {flight.callsign} "f"must use Runway {flight.required_runway}"
+            self.show_error_popup(msg)
+            #self.add_log(
+            #    f"Constraint violation: {flight.callsign} "
+            #    f"must use Runway {flight.required_runway}"
+            #)
             return
 
         if result is False:
-            self.add_log(f"Runway {runway.name} is already occupied.")
             return
 
-        # sucesso
         if flight in self.engine.flights:
             self.engine.flights.remove(flight)
             self.engine.session.log_event(f"FLIGHT_DT_{decision_time:.3f}_{flight.callsign}")
@@ -465,10 +471,44 @@ class ATCApp:
         label.pack(side="left", fill="x")
 
 
+    #POPUP
+
+    def show_error_popup(self, message):
+
+        popup = tk.Toplevel(self.root)
+        popup.overrideredirect(True)  
+        popup.attributes("-topmost", True)
+
+        width = 400
+        height = 120
+
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+
+        x = (screen_width // 2) - (width // 2)
+        y = (screen_height // 2) - (height // 2)
+
+        popup.geometry(f"{width}x{height}+{x}+{y}")
+        popup.configure(bg="#ff4d4d")  
+
+        label = tk.Label(
+            popup,
+            text=message,
+            font=("Arial", 14, "bold"),
+            bg="#ff4d4d",
+            fg="white",
+            wraplength=350,
+            justify="center"
+        )
+        label.pack(expand=True)
+
+        # fecha automaticamente ao fim de 2 segundos
+        self.root.after(2000, popup.destroy)
+
+
     #System Messages
 
     def add_system_message(self, message_obj):
-        # Guardar no engine
         self.engine.system_messages.append(message_obj)
 
         row = tk.Frame(self.message_frame, bg="white")
