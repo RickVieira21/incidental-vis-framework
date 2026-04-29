@@ -547,7 +547,7 @@ class ExperimentalSession:
         self.trial_already_counted = True
 
         # --------- SYSTEM ACK ERRORS ----------
-        unacked = [
+        '''unacked = [
             msg for msg in self.engine.system_messages
             if not msg.acknowledged
         ]
@@ -557,7 +557,7 @@ class ExperimentalSession:
         self.engine.system_ack_errors += num_unacked
         self.engine.total_errors += num_unacked
 
-        '''
+        
         #PER TRIAL
         print("")
         print("Trial errors:", self.engine.total_errors)
@@ -582,7 +582,7 @@ class ExperimentalSession:
         self.log_event(f"ERROR_TOTAL_{self.engine.total_errors}")
         self.log_event(f"ERROR_CONSTRAINT_{self.engine.constraint_errors}")
         self.log_event(f"ERROR_EXPIRATION_{self.engine.expiration_errors}")
-        self.log_event(f"ERROR_ACK_{self.engine.system_ack_errors}")
+        #self.log_event(f"ERROR_ACK_{self.engine.system_ack_errors}")       //MESSAGES TO ACK IN THE END
         self.log_event(f"FLIGHTS_TOTAL_{self.engine.total_flights_generated}")
         self.log_event(f"MESSAGES_TOTAL_{self.scheduler.message_manager.total_messages_generated}")
         self.log_event(f"FLIGHTS_CONSTRAINED_{self.engine.total_constrained_flights}")
