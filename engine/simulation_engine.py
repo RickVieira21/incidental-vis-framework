@@ -125,7 +125,7 @@ class SimulationEngine:
 
         # atualizar controlo temporal
         self.last_modification_time = current_time
-        self.next_modification_interval = random.randint(15, 25)
+        self.next_modification_interval = random.randint(10, 15)
 
 
 
