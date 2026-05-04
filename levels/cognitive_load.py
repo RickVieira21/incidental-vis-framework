@@ -16,7 +16,7 @@ class CognitiveLoadProfile:
 
 
         elif self.level == "MEDIUM":
-              self.event_interval = 6.5
+              self.event_interval = 6.625
               self.decision_timeout = 10
               self.time_speed = 1
               self.message_frequency = 0.5
@@ -30,7 +30,7 @@ class CognitiveLoadProfile:
 
 
         elif self.level == "HIGH":
-              self.event_interval = 4.0
+              self.event_interval = 4.25
               self.decision_timeout = 5
               self.time_speed = 1
               self.message_frequency = 0.7

@@ -197,19 +197,40 @@ class ExperimentalSession:
             print("EEG disabled (no device)")
             return
 
-        self.mac_address = "98:D3:71:FE:51:3B"  
-        self.sampling_rate = 1000 # gera 1000 samples por segundo
-        self.channels = [0]  # canal A1
+        self.mac_address = "98:D3:71:FE:51:3B"
+        self.sampling_rate = 1000
+        self.channels = [0]
 
-        self.eeg_device = BITalino(self.mac_address)
-        self.eeg_device.start(self.sampling_rate, self.channels)
+        max_attempts = 5
+        attempt = 0
+        connected = False
 
+        while attempt < max_attempts and not connected:
+            try:
+                print(f"EEG connection attempt {attempt + 1}")
+
+                self.eeg_device = BITalino(self.mac_address)
+                self.eeg_device.start(self.sampling_rate, self.channels)
+
+                connected = True
+
+            except Exception as e:
+                print(f"EEG connection failed: {e}")
+                attempt += 1
+                time.sleep(1.5)  # tempo para BT recuperar
+
+        if not connected:
+            print("EEG connection failed after retries")
+            self.use_eeg = False
+            self.log_event("EEG_FAILED")
+            return
+
+        # se chegou aqui sucesso
         self.eeg_data = []
         self.eeg_recording = True
-        self.log_event("EEG_START")
-
         self.eeg_start_time = time.time()
 
+        self.log_event("EEG_START")
         print("EEG recording started")
 
 
