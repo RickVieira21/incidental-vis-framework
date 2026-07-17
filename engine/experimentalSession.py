@@ -1,9 +1,43 @@
-import tkinter as tk
+"""
+experimentalSession.py
+
+Defines ExperimentalSession, the top-level controller for running a
+full experimental session with a participant: sequencing the 9 trial
+conditions (in a counterbalanced order via a Latin square), starting
+and stopping physiological/behavioural recordings (eye-tracking via
+OpenFace, EEG via a BITalino device, and microphone audio), scheduling
+the incidental visualizations that are the focus of the study, logging
+all timestamped events to CSV, and managing the rest-baseline periods
+between conditions.
+
+IMPORTANT — platform & hardware dependencies:
+    This module is Windows-specific (uses `win32gui`/`win32con` from
+    pywin32) and depends on external hardware/software that other
+    users of the framework will need to configure for their own setup:
+        - OpenFace 2.2.0 (eye-tracking), invoked via a **hardcoded
+          absolute path** to `FeatureExtraction.exe`
+          (`start_openface_recording`). This path MUST be changed to
+          match the OpenFace installation location on any other
+          machine.
+        - A BITalino EEG device, addressed via a **hardcoded Bluetooth
+          MAC address** (`start_eeg_recording`). EEG recording is
+          disabled by default (`self.use_eeg = False` in `__init__`)
+          and must be explicitly enabled and reconfigured to use a
+          different device.
+        - A microphone, addressed via a **hardcoded input device
+          index** (`input_device_index=0` in `start_audio_recording`).
+          This may need to be changed depending on the machine's audio
+          devices.
+    These are exactly the kind of setup-specific details that should
+    be called out prominently in the README/user manual, since other
+    researchers reusing this framework will need to adapt them.
+"""
 from levels.cognitive_load import CognitiveLoadProfile
 from levels.task_complexity import TaskComplexityProfile
 from ui.atc_ui import ATCApp
 from engine.simulation_engine import SimulationEngine
 from engine.event_scheduler import EventScheduler
+import tkinter as tk
 import subprocess
 import time
 import os
@@ -17,6 +51,59 @@ from bitalino import BITalino
 
 
 class ExperimentalSession:
+    """
+    Orchestrates a full experimental session for one participant,
+    covering all 9 trial conditions plus rest-baseline periods,
+    hardware recordings, and event logging.
+
+    A session is built around two counterbalanced orderings, both
+    looked up by `participant_id`:
+        - `self.conditions`: the order in which the 9 condition
+          letters (A-I, each mapping to a cognitive-load x
+          task-complexity combination — see `apply_condition`) are
+          presented to this participant (Latin square across
+          participants).
+        - `self.iv_order`: the order in which the 36 possible
+          incidental-visualization images (numbered 1-36) are shown
+          across the whole session, also counterbalanced per
+          participant via a separate Latin square.
+
+    Attributes:
+        root: The Tkinter root window.
+        participant_id (int): Numeric ID used to look up this
+            participant's counterbalancing orders.
+        condition_duration (int): Length of each trial condition in
+            seconds (120s = 2 minutes, matching the study design).
+        baseline_duration (int): Length of the rest/baseline period
+            shown between conditions, in seconds.
+        is_practice (bool): Whether this session is a practice run
+            (uses a fixed practice condition/IV order and loops
+            indefinitely instead of ending).
+        on_start_callback: Callback used to return to the start menu
+            (e.g. after pressing Escape).
+        trial_already_counted (bool): Guards against double-counting
+            errors/logging if `start_baseline` is somehow triggered
+            more than once for the same trial.
+        total_errors_overall / constraint_errors_overall /
+        expiration_errors_overall / system_ack_errors_overall (int):
+            Running totals across the whole session. 
+        events (list[tuple[float, str]]): Timestamped event log for
+            the CURRENT trial, written to a CSV file at the end of
+            each condition via `start_baseline`.
+        current_index (int): Index of the current condition within
+            `self.conditions`.
+        conditions (list[str]): This participant's condition-letter
+            order, from `load_conditions`.
+        iv_order (list[int]): This participant's incidental-image
+            order, from `load_iv_latin_square`.
+        use_audio (bool): Whether microphone recording is enabled.
+        audio, audio_stream, audio_frames, audio_recording: PyAudio
+            recording state (see the PYAUDIO section below).
+        incidental_image: A preloaded Tkinter PhotoImage
+            ("incidental.png").
+        use_eeg (bool): Whether EEG recording is enabled. False by
+            default.
+    """
 
     def __init__(self, root, participant_id, on_start_callback, practice=False):
         self.root = root
@@ -50,13 +137,47 @@ class ExperimentalSession:
         self.root.bind("<Escape>", self.on_escape)
 
     def attach(self, engine, ui, scheduler):
+        """
+        Wire this session to the currently active SimulationEngine, UI
+        controller, and EventScheduler.
+
+        Also sets `engine.session = self`, so the engine and its
+        scheduler can call back into `self.log_event(...)` when
+        flights/messages expire (see engine/event_scheduler.py).
+
+        Args:
+            engine (SimulationEngine): The active engine for the
+                current trial.
+            ui: The active UI controller (ATCApp instance).
+            scheduler (EventScheduler): The active scheduler for the
+                current trial.
+        """
         self.engine = engine
         self.engine.session = self
         self.ui = ui
         self.scheduler = scheduler
 
     def load_conditions(self, participant_id):
+        """
+        Look up this participant's Latin-square-ordered sequence of
+        the 9 condition letters (A-I).
 
+        Each letter corresponds to one cognitive-load x
+        task-complexity combination (see `apply_condition` for the
+        mapping). The table below is a fixed, precomputed Latin square
+        assignment for up to 30 participants, ensuring that across the
+        whole sample, each condition appears equally often in each
+        serial position (counterbalancing order effects).
+
+        Args:
+            participant_id (int): The participant's numeric ID
+                (expected range: 1-30, based on the table below).
+
+        Returns:
+            list[str]: The 9 condition letters in presentation order
+            for this participant, or an empty list if the ID isn't
+            found in the table.
+        """
         LATIN_SQUARE = {
             1:  ["A","B","I","C","H","D","G","E","F"],
             2:  ["G","F","H","E","I","D","A","C","B"],
@@ -91,11 +212,30 @@ class ExperimentalSession:
         }
 
         return LATIN_SQUARE.get(participant_id, [])
-    
-
 
     def load_iv_latin_square(self):
+        """
+        Look up this participant's Latin-square-ordered sequence of
+        incidental-visualization image numbers (1-36).
 
+        Each trial condition shows exactly 4 incidental images (at
+        25s, 50s, 75s, and 100s into the 120s trial — see
+        `start_condition`), so across the 9 conditions of a full
+        session, 36 image "slots" need to be filled. This table
+        assigns, for each participant, which of the 36 possible images
+        goes into each of those 36 slots, again to counterbalance
+        which images appear at which position/condition across the
+        sample.
+
+        If `self.is_practice` is True, the fixed practice ordering
+        (key 31) is used regardless of `participant_id`.
+
+        Returns:
+            list[int]: 36 image numbers in presentation order (to be
+            sliced into groups of 4, one group per condition — see
+            `start_condition`), or an empty list if the ID isn't found
+            in the table (and this isn't a practice session).
+        """
         LATIN_IV = {
             1:  [1,2,36,3,35,4,34,5,33,6,32,7,31,8,30,9,29,10,28,11,27,12,26,13,25,14,24,15,23,16,22,17,21,18,20,19],
             2:  [2,3,1,4,36,5,35,6,34,7,33,8,32,9,31,10,30,11,29,12,28,13,27,14,26,15,25,16,24,17,23,18,22,19,21,20],
@@ -134,25 +274,51 @@ class ExperimentalSession:
             return LATIN_IV[31]
 
         return LATIN_IV.get(self.participant_id, [])
-    
 
     # ---------------- OPENFACE -----------------
+    # Eye-tracking recording via the external OpenFace 2.2.0 tool,
+    # run as a separate subprocess for the duration of each trial.
 
     def hide_openface_window(self):
+        """
+        Find and hide OpenFace's own "tracking result" preview window
+        (which it opens automatically), so it doesn't visually
+        interfere with the task UI or distract the participant.
+
+        Uses `win32gui.EnumWindows` to scan all open top-level windows
+        and hide any whose title contains "tracking result".
+
+        Windows-only (depends on pywin32).
+        """
         def enum_handler(hwnd, ctx):
             if "tracking result" in win32gui.GetWindowText(hwnd):
                 win32gui.ShowWindow(hwnd, win32con.SW_HIDE)
 
         win32gui.EnumWindows(enum_handler, None)
 
-
-
     def start_openface_recording(self):
+        """
+        Launch OpenFace's FeatureExtraction.exe as a background
+        subprocess to record webcam-based eye/face tracking data for
+        the upcoming trial.
 
+        Output files are named `P<participant_id>_[PRACTICE_]Openface
+        <condition_index>` and written under
+        `eye_data/<filename>/P<participant_id>/`.
+
+        NOTE FOR OTHER USERS: the path to `FeatureExtraction.exe` is
+        currently hardcoded to a specific machine.
+        This MUST be updated to point to your own OpenFace
+        installation before this function will work.
+
+        Side effects:
+            - Stores the subprocess handle in `self.openface_process`.
+            - Records `self.trial_start_unix` (recording start time).
+            - Logs an "OPENFACE_START" event.
+        """
         prefix = "PRACTICE_" if self.is_practice else ""
         filename = f"P{self.participant_id}_{prefix}Openface{self.current_index}"
 
-        #base_dir = r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\processed"
         base_dir = os.path.join("eye_data", filename)
 
         participant_dir = os.path.join(base_dir, f"P{self.participant_id}")
@@ -161,10 +327,10 @@ class ExperimentalSession:
 
         self.trial_start_unix = time.time()
 
-        self.openface_process = subprocess.Popen( #CHANGE ABSOLUTE PATH
+        self.openface_process = subprocess.Popen( 
         [
-            r"C:\Users\ricvi\Downloads\OpenFace_2.2.0_win_x64\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
-            #r"C:\Users\ricvi\Documents\Fcul\tese\OpenFace_2.2.0_win_x64\FeatureExtraction.exe",
+            
+            #r"yourPath",
             "-device", "0",
             "-out_dir", participant_dir,
             "-of", filename,
@@ -177,27 +343,57 @@ class ExperimentalSession:
         self.log_event("OPENFACE_START")
         print("OpenFace started")
 
-
     def stop_openface_recording(self):
+        """
+        Terminate the OpenFace subprocess started by
+        `start_openface_recording`, if one is currently running.
 
+        Side effects:
+            - Terminates `self.openface_process` and clears the
+              reference.
+            - Logs an "OPENFACE_STOP" event.
+        """
         if hasattr(self, "openface_process") and self.openface_process:
             self.openface_process.terminate()
             self.openface_process = None
             self.log_event("OPENFACE_STOP")
             print("OpenFace stopped")
-    
-
 
     # -------------------- EEG ----------------------
-
+    # EEG recording via a BITalino device over Bluetooth. Disabled by
+    # default (`self.use_eeg = False`); every method below is a no-op
+    # unless `use_eeg` has been explicitly set to True (and a matching
+    # device is available at the configured MAC address).
 
     def start_eeg_recording(self):
+        """
+        Connect to a BITalino EEG device over Bluetooth and start
+        streaming samples, retrying a few times if the connection
+        fails (Bluetooth connections to these devices can be flaky).
 
+        No-op if `self.use_eeg` is False.
+
+        NOTE FOR OTHER USERS: the Bluetooth MAC address
+        (`self.mac_address`), sampling rate, and channel list are
+        hardcoded here and specific to the original BITalino device
+        used in this study. Update these to match your own device
+        before enabling EEG recording.
+
+        Behavior:
+            - Attempts up to 5 connection attempts (1.5s apart) before
+              giving up.
+            - On success: initializes `self.eeg_data` (buffer for
+              incoming samples), sets `self.eeg_recording = True`,
+              records `self.eeg_start_time`, and logs "EEG_START".
+            - On failure after all retries: disables EEG for the rest
+              of the session (`self.use_eeg = False`) and logs
+              "EEG_FAILED".
+        """
         if not self.use_eeg:
             print("EEG disabled (no device)")
             return
 
-        self.mac_address = "98:D3:71:FE:51:3B"
+        self.mac_address = "" #yourAddress
         self.sampling_rate = 1000
         self.channels = [0]
 
@@ -217,7 +413,7 @@ class ExperimentalSession:
             except Exception as e:
                 print(f"EEG connection failed: {e}")
                 attempt += 1
-                time.sleep(1.5)  # tempo para BT recuperar
+                time.sleep(1.5)  
 
         if not connected:
             print("EEG connection failed after retries")
@@ -225,7 +421,6 @@ class ExperimentalSession:
             self.log_event("EEG_FAILED")
             return
 
-        # se chegou aqui sucesso
         self.eeg_data = []
         self.eeg_recording = True
         self.eeg_start_time = time.time()
@@ -233,10 +428,18 @@ class ExperimentalSession:
         self.log_event("EEG_START")
         print("EEG recording started")
 
-
-
     def stop_eeg_recording(self):
+        """
+        Stop EEG streaming, close the device connection, and save all
+        buffered samples to a CSV file.
 
+        No-op if `self.use_eeg` is False.
+
+        Output file: `eeg_data/P<participant_id>_[PRACTICE_]EEG_trial
+        <condition_index>.csv`, containing the recording start
+        timestamp, sampling rate, and all raw samples collected during
+        the trial.
+        """
         if not self.use_eeg:
            return
 
@@ -265,10 +468,21 @@ class ExperimentalSession:
 
             print("EEG recording saved")
 
-
-
     def read_eeg_data(self):
+        """
+        Poll the BITalino device for new samples and append them to
+        the in-memory buffer, then reschedule itself.
 
+        No-op if EEG is disabled, not connected, or not currently
+        recording. Runs roughly 10 times per second (every 100ms),
+        reading 100 samples per call. If the device reports a
+        "CONTACTING_DEVICE" error (typically a Bluetooth dropout),
+        logs an "EEG_DISCONNECT" event.
+
+        This method reschedules itself via `root.after(100, ...)`
+        every time it runs (even after errors), so once started it
+        keeps polling until `eeg_recording`/`use_eeg` become False.
+        """
         if not self.use_eeg:
            return
 
@@ -288,13 +502,35 @@ class ExperimentalSession:
 
                 print("EEG read warning:", e)
  
-        self.root.after(100, self.read_eeg_data) # 1000 ms / 100 ms = 10 chamadas de read_eeg_data por segundo
-
+        self.root.after(100, self.read_eeg_data) 
 
     # -------------------- PYAUDIO ----------------------
+    # Microphone audio recording, used to capture verbal
+    # acknowledgements/think-aloud data (or similar) during the trial.
 
     def start_audio_recording(self):
-            
+            """
+            Open the microphone input stream and start recording audio
+            for the upcoming trial.
+
+            No-op if `self.use_audio` is False.
+
+            NOTE FOR OTHER USERS: `input_device_index=0` hardcodes
+            which microphone is used. The commented-out lines above
+            (querying `p.get_device_count()` /
+            `get_device_info_by_index`) show how to list available
+            devices and find the correct index for a different
+            machine.
+
+            Side effects:
+                - Initializes `self.audio` (PyAudio instance) and
+                  `self.audio_stream` (open input stream).
+                - Resets `self.audio_frames` and sets
+                  `self.audio_recording = True`.
+                - Records `self.audio_start_time`.
+                - Logs an "AUDIO_START" event.
+                - Kicks off the polling loop via `read_audio_data()`.
+            """
             #show mics
             #p = pyaudio.PyAudio()
 
@@ -328,9 +564,17 @@ class ExperimentalSession:
 
             self.read_audio_data()
 
-
     def read_audio_data(self):
+        """
+        Read one buffer's worth of audio samples from the open stream
+        and append them to the in-memory frame list, then reschedule
+        itself.
 
+        No-op if audio is disabled or the stream isn't open/recording.
+        Runs roughly 20 times per second (every 50ms). Logs an
+        "AUDIO_ERROR" event if reading the stream raises an exception
+        (e.g. a buffer overflow not otherwise suppressed).
+        """
         if not self.use_audio:
             return
 
@@ -345,12 +589,19 @@ class ExperimentalSession:
             print("Audio read warning:", e)
             self.log_event("AUDIO_ERROR")
 
-        # ~20 updates por segundo 
         self.root.after(50, self.read_audio_data)
 
-
     def stop_audio_recording(self):
+        """
+        Stop and close the audio stream, terminate PyAudio, and save
+        all recorded frames to a WAV file.
 
+        No-op if `self.use_audio` is False.
+
+        Output file: `audio_data/P<participant_id>_[PRACTICE_]
+        audio_trial<condition_index>.wav` (mono, 16-bit, 16kHz, matching
+        the stream's recording parameters).
+        """
         if not self.use_audio:
             return
 
@@ -383,17 +634,65 @@ class ExperimentalSession:
     # ------------------ LOGS --------------------
 
     def log_event(self, event_name):
+        """
+        Append a timestamped event to the current trial's in-memory
+        event log (`self.events`), later flushed to a CSV file by
+        `start_baseline`.
 
+        Used throughout the session/engine/scheduler to record
+        discrete, analyzable events (e.g. "TRIAL_START",
+        "FLIGHT_EXPIRED_...", "IV_APPEAR_<n>", hardware start/stop
+        events, etc.), each paired with a Unix timestamp.
+
+        Args:
+            event_name (str): A short, descriptive event identifier.
+        """
         timestamp = time.time()
         self.events.append((timestamp, event_name))
-
 
     # --------------- MAIN CODE ------------------
 
     def start(self):
+        """Begin the session by starting its first trial condition."""
         self.start_condition()
 
     def start_condition(self):
+        """
+        Set up and run one full trial condition (2 minutes): start all
+        hardware recordings, apply the condition's cognitive-load and
+        task-complexity levels, display the on-screen trial timer,
+        schedule the 4 incidental-visualization appearances, and
+        schedule the automatic transition to the rest-baseline period.
+
+        Sequence:
+            1. Reset the event log and start OpenFace recording
+               (with a short sleep to let it initialize).
+            2. Start EEG recording and its polling loop (with a short
+               sleep).
+            3. Start audio recording and log "TRIAL_START".
+            4. If all conditions have already been run, print a
+               message and stop (session finished).
+            5. Otherwise, look up the current condition letter and
+               apply it via `apply_condition` (sets cognitive/
+               complexity profiles on the engine).
+            6. Create/update the on-screen condition/timer label
+               (bottom-right corner) and start its per-second update
+               loop (`update_trial_timer`).
+            7. Slice this condition's 4 incidental-visualization image
+               numbers out of `self.iv_order` (4 per condition, in
+               order), and schedule each one to appear at a fixed
+               offset (25s, 50s, 75s, 100s) into the trial via
+               `root.after(...)`, storing the resulting `after` IDs so
+               they can be cancelled later if needed (e.g. on Escape).
+            8. Unless this is a practice session, schedule the
+               automatic transition to `start_baseline` after
+               `condition_duration` (120s).
+
+        Note: `time.sleep(...)` calls here briefly block the Tkinter
+        main loop while hardware recordings initialize — this is a
+        deliberate (if slightly UI-blocking) trade-off to ensure
+        recordings are running before the trial officially starts.
+        """
         self.events = []
         
         self.start_openface_recording()
@@ -416,7 +715,6 @@ class ExperimentalSession:
 
         self.apply_condition(condition)
 
-        # indicador de condição no canto inferior direito
         self.trial_time_left = self.condition_duration
 
         self.condition_label = tk.Label(
@@ -455,13 +753,26 @@ class ExperimentalSession:
 
             self.incidental_after_ids.append(after_id)
 
-        # timer 120s
         if not self.is_practice:
             self.root.after(self.condition_duration * 1000, self.start_baseline)
 
-
     def update_trial_timer(self):
+        """
+        Update the on-screen condition/timer label once per second
+        and reschedule itself, counting down `self.trial_time_left`.
 
+        In practice mode, the timer loops back to
+        `condition_duration` instead of stopping once it reaches
+        zero, so practice can run indefinitely. In normal (non-
+        practice) mode, once time runs out this method simply stops
+        rescheduling itself (the actual transition to baseline is
+        driven separately by the `root.after` call scheduled in
+        `start_condition`).
+
+        Also calls `hide_openface_window()` on every tick, to
+        continuously suppress OpenFace's preview window in case it
+        reappears.
+        """
         if not hasattr(self, "condition_label"):
             return
 
@@ -470,7 +781,7 @@ class ExperimentalSession:
 
         if self.trial_time_left < 0:
             if self.is_practice:
-                self.trial_time_left = self.condition_duration  # reset loop
+                self.trial_time_left = self.condition_duration 
             else:
                 return
         
@@ -494,9 +805,24 @@ class ExperimentalSession:
         if self.trial_time_left >= 0:
             self.timer_after_id = self.root.after(1000, self.update_trial_timer)
 
-        
     def on_escape(self, event=None):
+        """
+        Handle the participant/experimenter pressing Escape: abort the
+        current trial early, stop all recordings, and return to the
+        start menu.
 
+        Side effects:
+            - Cancels all pending incidental-visualization
+              `after` callbacks.
+            - Stops audio, OpenFace, and EEG recording.
+            - Stops the event scheduler, if attached.
+            - Destroys all current UI widgets.
+            - Recreates the `StartMenu` (imported locally to avoid a
+              circular import with `ui.atc_ui`).
+
+        Note: this does NOT save the partial trial's events to CSV or
+        log a corresponding event!
+        """
         if hasattr(self, "incidental_after_ids"):
             for after_id in self.incidental_after_ids:
                 try:
@@ -506,7 +832,6 @@ class ExperimentalSession:
 
         print("ESC pressed - returning to menu")
 
-        # parar tudo
         self.stop_audio_recording()
         self.stop_openface_recording()
         self.stop_eeg_recording()
@@ -514,20 +839,21 @@ class ExperimentalSession:
         if hasattr(self, "scheduler"):
             self.scheduler.stop()
 
-        # limpar UI atual
         for widget in self.root.winfo_children():
             widget.destroy()
 
-        # voltar ao menu
         from ui.atc_ui import StartMenu
         StartMenu(self.root, self.on_start_callback)
 
-
-
-# ------------- BASELINE -----------------
+    # ------------- BASELINE -----------------
 
     def show_end_screen(self):
+        """
+        Display a simple "Thank you for your participation!" end
+        screen once all conditions have been completed.
 
+        Clears all existing widgets from the root window first.
+        """
         print("Experiment finished")
 
         # limpar UI
@@ -547,10 +873,36 @@ class ExperimentalSession:
         )
         label.pack(expand=True)
 
-
-
     def start_baseline(self):
+        """
+        End the current trial condition: stop all recordings, log and
+        save per-trial summary statistics and the full event log to
+        CSV, reset the engine, and show a rest/baseline countdown
+        screen before moving on to the next condition.
 
+        Sequence:
+            1. Log "TRIAL_END" and stop audio/OpenFace/EEG recording.
+            2. If this is a practice session, just print a message and
+               return (practice doesn't count toward results and
+               loops instead — see `update_trial_timer`).
+            3. Guard against running this twice for the same trial via
+               `trial_already_counted`.
+            4. Log summary counters for this trial (total errors,
+               constraint errors, expiration errors, total flights
+               generated, total messages generated, total constrained
+               flights). 
+            5. Cancel the trial timer and any remaining incidental-
+               visualization callbacks; destroy the condition label and
+               any open incidental-visualization window.
+            6. Save the full per-trial event log to
+               `events_data/P<participant_id>_[PRACTICE_]
+               events_trial<condition_index>.csv`.
+            7. Stop the scheduler and clear the engine's flight list.
+            8. Destroy the current UI and show a white "Take some time
+               to rest!" overlay with a countdown
+               (`update_baseline_countdown`), lasting
+               `baseline_duration` seconds.
+        """
         self.log_event("TRIAL_END")
         self.stop_audio_recording()
         self.stop_openface_recording()
@@ -568,6 +920,7 @@ class ExperimentalSession:
         self.trial_already_counted = True
 
         # --------- SYSTEM ACK ERRORS ----------
+
         '''unacked = [
             msg for msg in self.engine.system_messages
             if not msg.acknowledged
@@ -603,7 +956,7 @@ class ExperimentalSession:
         self.log_event(f"ERROR_TOTAL_{self.engine.total_errors}")
         self.log_event(f"ERROR_CONSTRAINT_{self.engine.constraint_errors}")
         self.log_event(f"ERROR_EXPIRATION_{self.engine.expiration_errors}")
-        #self.log_event(f"ERROR_ACK_{self.engine.system_ack_errors}")       //MESSAGES TO ACK IN THE END
+        #self.log_event(f"ERROR_ACK_{self.engine.system_ack_errors}")       
         self.log_event(f"FLIGHTS_TOTAL_{self.engine.total_flights_generated}")
         self.log_event(f"MESSAGES_TOTAL_{self.scheduler.message_manager.total_messages_generated}")
         self.log_event(f"FLIGHTS_CONSTRAINED_{self.engine.total_constrained_flights}")
@@ -618,7 +971,6 @@ class ExperimentalSession:
             for after_id in self.incidental_after_ids:
                 self.root.after_cancel(after_id)
 
-        # Fechar janela se ainda estiver aberta
         if hasattr(self, "incidental_window") and self.incidental_window.winfo_exists():
             self.incidental_window.destroy()
 
@@ -641,17 +993,13 @@ class ExperimentalSession:
 
         print("Events saved")
 
-        # Parar scheduler
         self.scheduler.stop()
 
-        # Reset engine state
         self.engine.flights.clear()
 
-        # Destruir UI atual
         for widget in self.root.winfo_children():
             widget.destroy()
 
-        # Criar overlay branco
         self.baseline_frame = tk.Frame(self.root, bg="white")
         self.baseline_frame.pack(fill="both", expand=True)
 
@@ -667,11 +1015,14 @@ class ExperimentalSession:
 
         self.update_baseline_countdown()
 
-
     def update_baseline_countdown(self):
-
+        """
+        Count down the rest/baseline period once per second. Once it
+        reaches zero, briefly shows "Loading...", tears down the
+        baseline overlay, and advances to the next condition via
+        `next_condition()`.
+        """
         if self.countdown <= 0:
-            # Mostrar Loading em vez de destruir logo
             self.baseline_label.config(
                 text="Loading...",
                 font=("Arial", 36, "bold")
@@ -688,19 +1039,26 @@ class ExperimentalSession:
         self.countdown -= 1
         self.root.after(1000, self.update_baseline_countdown)
 
-
-# --------------------------------------------
-
+    # --------------------------------------------
 
     def next_condition(self):
+        """
+        Advance to the next trial condition, or show the end screen if
+        all conditions have been completed.
 
+        Rebuilds the SimulationEngine, UI (ATCApp), and EventScheduler
+        from scratch for the new condition (rather than reusing the
+        previous ones), reusing the previous engine's cognitive/
+        complexity profiles only as placeholders — they get
+        overwritten immediately afterward by `start_condition` ->
+        `apply_condition` based on the new condition letter.
+        """
         self.current_index += 1
 
         if self.current_index >= len(self.conditions):
             self.show_end_screen()
             return
 
-        # Recriar engine e UI do zero
         cognitive = self.engine.cognitive
         complexity = self.engine.complexity
 
@@ -712,12 +1070,27 @@ class ExperimentalSession:
 
         self.start_condition()
         self.scheduler.start()
-        
-
-
 
     def apply_condition(self, letter):
+        """
+        Translate a condition letter (A-I) into concrete
+        CognitiveLoadProfile and TaskComplexityProfile instances, and
+        install them on the current engine.
 
+        Mapping (cognitive level, complexity level):
+            A: LOW/LOW      D: LOW/MEDIUM    G: LOW/HIGH
+            B: MEDIUM/LOW   E: MEDIUM/MEDIUM H: MEDIUM/HIGH
+            C: HIGH/LOW     F: HIGH/MEDIUM   I: HIGH/HIGH
+
+        If `self.is_practice` is True, the levels are overridden to a
+        fixed LOW cognitive / HIGH complexity combination regardless
+        of the letter passed in, so practice always uses a consistent
+        (and presumably representative/challenging) configuration.
+
+        Args:
+            letter (str): One of "A".."I", identifying the trial
+                condition.
+        """
         mapping = {
             "A": ("LOW", "LOW"),
             "B": ("MEDIUM", "LOW"),
@@ -741,26 +1114,67 @@ class ExperimentalSession:
 
         print(f"Condition {letter} → Cognitive: {cog_level}, Complexity: {comp_level}")
 
-
-
     def trigger_critical_events(self):
+        """
+        Inject a small burst of extra task events (2 extra flights and
+        1 extra system message) into the running trial.
 
-        # gerar 1 ou 2 voos extra
+        Called right before each incidental-visualization appearance
+        (see `show_incidental_visualization`), to ensure
+        there is always meaningful task activity happening around the
+        time the incidental image appears — relevant for studying
+        whether/when participants notice it amid ongoing task demands.
+        """
+       
         for _ in range(2):
             flight = self.engine.generate_flight()
             if flight:
                 self.ui.add_flight(flight)
 
-        # gerar mensagem do sistema
         msg = self.scheduler.message_manager.generate_message()
         if msg:
             self.ui.add_system_message(msg)
 
-
-# ---------------- INCIDENTAL VIS -----------------
+    # ---------------- INCIDENTAL VIS -----------------
 
     def show_incidental_visualization(self, iv_number):
+        """
+        Display one incidental-visualization image as a borderless,
+        always-on-top popup window for a short, fixed duration.
 
+        This is the core mechanism for the study's independent
+        interest: incidental visualizations appear briefly, outside
+        the main task UI, and their visibility/noticing is what's
+        being measured. Each trial condition triggers this method 4
+        times (scheduled from `start_condition`, at 25s/50s/75s/100s
+        into the 2-minute trial).
+
+        Sequence:
+            1. Bails out if the UI isn't attached or the root window
+               no longer exists (e.g. session was aborted).
+            2. Calls `trigger_critical_events()` to inject extra task
+               activity at the same time the image appears.
+            3. Loads the image for this `iv_number` from
+               `imgs/iv_<iv_number>.png`.
+            4. Creates a borderless (`overrideredirect(True)`),
+               always-on-top (`-topmost`) Toplevel window sized
+               483x588px, positioned flush against the right edge of
+               the screen and vertically centered.
+            5. Logs an "IV_APPEAR_<iv_number>" event (timestamped,
+               used later to align this with eye-tracking/EEG/audio
+               data for analysis).
+            6. Displays the image in the popup.
+            7. Schedules the popup to automatically close after 1
+               second (`hide_incidental_visualization`) — i.e. the
+               image is shown for exactly 1 second before
+               disappearing.
+
+        Args:
+            iv_number (int): Which of the 36 possible incidental
+                images to show (determines the file
+                `imgs/iv_<iv_number>.png`), as determined by this
+                participant's counterbalanced `iv_order`.
+        """
         if not hasattr(self, "ui") or not self.ui:
             return
 
@@ -773,7 +1187,7 @@ class ExperimentalSession:
         image = tk.PhotoImage(file=image_path)
 
         self.incidental_window = tk.Toplevel(self.root)
-        self.incidental_window.overrideredirect(True) #remover bordas
+        self.incidental_window.overrideredirect(True) 
         self.incidental_window.attributes("-topmost", True)
 
         screen_width = self.root.winfo_screenwidth()
@@ -782,9 +1196,8 @@ class ExperimentalSession:
         width = 483
         height = 588
 
-        #x = (screen_width // 2) - (width // 2) # Centrado horizontalmente
-        x = screen_width - width # Encostado à direita
-        y = (screen_height // 2) - (height // 2)  # Centrado verticalmente
+        x = screen_width - width 
+        y = (screen_height // 2) - (height // 2)  
 
         self.incidental_window.geometry(f"{width}x{height}+{x}+{y}")
         self.log_event(f"IV_APPEAR_{iv_number}")
@@ -795,11 +1208,13 @@ class ExperimentalSession:
 
         self.root.after(1000, self.hide_incidental_visualization)
 
-
-  
     def hide_incidental_visualization(self):
+        """
+        Close the currently displayed incidental-visualization popup
+        window, if one exists and is still open.
 
+        Called automatically 1 second after
+        `show_incidental_visualization` opens the popup.
+        """
         if hasattr(self, "incidental_window") and self.incidental_window.winfo_exists():
             self.incidental_window.destroy()
-
-

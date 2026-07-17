@@ -1,8 +1,32 @@
+"""
+atc_ui.py
+
+Defines the Tkinter-based graphical interface for the ATC simulation
+task: ATCApp (the main in-trial interface showing runways, the flight
+queue, the console log, and system messages) and StartMenu (the
+initial screen where the experimenter selects a participant ID and
+starts either the real experiment or a practice run).
+
+This is the only file in the `ui` folder and is what participants
+directly interact with while completing each trial.
+"""
+
 import tkinter as tk
 import time
 from tkinter import ttk
 
+
 class ScrollableFrame(ttk.Frame):
+    """
+    A reusable Tkinter frame that adds vertical scrolling to its
+    contents, used to hold the flight queue (which can grow beyond
+    the visible area as more flights spawn).
+
+    Usage: place widgets inside `self.scrollable_frame` (not directly
+    inside the ScrollableFrame itself) — that inner frame is the one
+    that actually scrolls within the canvas.
+    """
+
     def __init__(self, container):
 
         super().__init__(container)
@@ -24,19 +48,65 @@ class ScrollableFrame(ttk.Frame):
 
 
 class ATCApp:
+    """
+    Main task interface: displays the 3 runways, the scrollable flight
+    queue, a console log of events, and pending system messages with
+    acknowledgement checkboxes. Also owns the AUTHORIZE button used to
+    commit a flight-to-runway assignment.
+
+    This class acts as the "ui" object referenced throughout the
+    engine/scheduler/session modules (e.g. `self.ui.update_flight(...)`
+    calls made by EventScheduler), so its public methods form the
+    contract those other modules rely on.
+
+    Layout overview:
+        - Top-left: Runways canvas (3 horizontal lanes: A, B, C).
+        - Top-right: Scrollable flight queue (one button per flight).
+        - Bottom-left: Console (scrollable log + acknowledgeable
+          system messages).
+        - Bottom-right: AUTHORIZE button, used to confirm a
+          flight-runway assignment after selecting both.
+
+    Attributes:
+        root: The Tkinter root window.
+        engine (SimulationEngine): The engine whose state this UI
+            reflects and whose actions (assign_flight_to_runway,
+            get_runway) it triggers.
+        selected_flight (str or None): Callsign of the currently
+            selected flight (for display/logging convenience;
+            `selected_flight_obj` is the authoritative reference).
+        selected_flight_button: The Tkinter Button widget corresponding
+            to the currently selected flight, so its highlight color
+            can be reset when the selection changes.
+        selected_runway (str or None): Name of the currently selected
+            runway.
+        selected_runway_rect: The Canvas rectangle item ID
+            corresponding to the currently selected runway.
+        selected_flight_obj (Flight or None): The actual Flight object
+            currently selected, used when authorizing an assignment.
+        flight_buttons (dict[Flight, tk.Button]): Maps each active
+            Flight to its corresponding button widget in the queue.
+        runway_timer_texts (dict[str, int]): Maps each runway name to
+            the Canvas text item ID showing its remaining occupied
+            time.
+        system_message_widgets (dict[SystemMessage, dict]): Maps each
+            pending SystemMessage to its associated row/label widgets,
+            so they can be updated or removed.
+        runways (dict[str, int]): Maps each runway name to its Canvas
+            rectangle item ID.
+    """
+
     def __init__(self, root, engine):
         self.root = root
         self.engine = engine
         self.root.title("ATC Simulator")
-        #self.root.geometry("1450x820") #FIXO
+
         screen_width = self.root.winfo_screenwidth()
         screen_height = self.root.winfo_screenheight()
 
-        # metade do ecrã (lado esquerdo)
         width = int(screen_width * 0.75)
         height = int(screen_height * 0.93)
 
-        # posição: x=0 (esquerda), y=0 (topo)
         self.root.geometry(f"{width}x{height}+0+0")
         self.root.resizable(False, False)
                 
@@ -118,11 +188,11 @@ class ATCApp:
             bg="#d9d9d9"
         ).pack(anchor="w", padx=10, pady=5)
 
-        # Frame branco fixo
+
         content_frame = tk.Frame(console_frame, bg="white")
         content_frame.pack(fill="both", expand=True, padx=10, pady=(0, 5))
 
-        # Canvas para permitir scroll interno
+
         canvas = tk.Canvas(content_frame, bg="white", highlightthickness=0)
         def _on_mousewheel(event):
             canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
@@ -145,8 +215,6 @@ class ATCApp:
 
         self.message_frame = scrollable_area
 
-
-
         # AUTHORIZE button (right)
         auth_frame = tk.Frame(bottom_frame)
         auth_frame.pack(side="right", padx=15)
@@ -163,14 +231,28 @@ class ATCApp:
         )
         authorize_btn.pack()
 
-    # --------------------------- RUNWAYS
+
 
     def draw_runways(self):
-        self.canvas.delete("all")  # limpa antes de redesenhar
+        """
+        Draw (or redraw) the 3 runway lanes on the canvas, centered
+        horizontally, stacked vertically with spacing.
+
+        If the canvas hasn't been rendered yet (width still reads as
+        1px, a common Tkinter timing quirk before the first paint),
+        this reschedules itself 50ms later instead of drawing with
+        incorrect dimensions.
+
+        Rebuilds `self.runways` (name -> rectangle ID) and
+        `self.runway_timer_texts` (name -> text ID) from scratch each
+        time it's called, and (re-)binds a left-click handler on each
+        runway rectangle to `select_runway`.
+        """
+        self.canvas.delete("all") 
 
         canvas_width = self.canvas.winfo_width()
 
-        if canvas_width == 1:  # ainda não renderizado
+        if canvas_width == 1: 
             self.canvas.after(50, self.draw_runways)
             return
 
@@ -214,10 +296,18 @@ class ATCApp:
             self.runways[name] = rect
             y += lane_height + spacing
 
-
-
     def select_runway(self, runway_name):
+        """
+        Handle a click on a runway lane: select it (highlighting it
+        blue) if it's available, or show an error popup if it's
+        already occupied.
 
+        If a flight is already selected, prompts the participant (via
+        the console log) to press AUTHORIZE to confirm the pairing.
+
+        Args:
+            runway_name (str): Name of the clicked runway ("A"/"B"/"C").
+        """
         runway = self.engine.get_runway(runway_name)
 
         if not runway.available:
@@ -226,13 +316,13 @@ class ATCApp:
             self.add_log(f"Runway {runway_name} is already occupied.")
             return
 
-        # remover highlight anterior
+  
         if self.selected_runway_rect:
             prev_runway = self.engine.get_runway(self.selected_runway)
             if prev_runway.available:
                 self.canvas.itemconfig(self.selected_runway_rect, fill="#b3ffb3")
 
-        # novo highlight
+
         rect = self.runways[runway_name]
         self.canvas.itemconfig(rect, fill="#99ccff")
 
@@ -244,16 +334,25 @@ class ATCApp:
                 f"Allocate {self.selected_flight_obj.callsign} to runway {runway_name}? Press AUTHORIZE."
             )
 
-
-
     def update_runway(self, runway):
-      
+        """
+        Refresh the visual state of a single runway lane: its fill
+        color (green=available, blue=selected, red=occupied) and its
+        remaining-occupied-time text.
+
+        Called once per second for every runway by
+        EventScheduler.schedule_runway_update.
+
+        Args:
+            runway (Runway): The runway whose display should be
+                refreshed.
+        """
         if not hasattr(self, "runways") or runway.name not in self.runways:
             return
         rect = self.runways[runway.name]
         text_id = self.runway_timer_texts[runway.name]
 
-        # se for a runway selecionada, manter highlight
+
         if runway.name == self.selected_runway:
             self.canvas.itemconfig(rect, fill="#99ccff")
         else:
@@ -272,14 +371,30 @@ class ATCApp:
             )
 
 
-    # --------------------------- FLIGHTS
 
     def add_flight(self, flight):
+        """
+        Register a newly generated flight in the UI by creating its
+        queue button.
+
+        Args:
+            flight (Flight): The newly generated flight to display.
+        """
         self.add_flight_button(flight)
 
-
     def add_flight_button(self, flight):
+        """
+        Create and pack a new button in the flight queue representing
+        `flight`, showing its ETA, callsign, and (if applicable) its
+        required runway constraint. Background color encodes urgency/
+        status (see `get_flight_base_color`).
 
+        The button's click handler selects this flight
+        (`select_flight`).
+
+        Args:
+            flight (Flight): The flight to create a button for.
+        """
         offset = 43
 
         eta_part = f"ETA {flight.eta}s"
@@ -305,34 +420,53 @@ class ATCApp:
 
         self.flight_buttons[flight] = btn
 
-
-
-
     def get_flight_base_color(self, flight):
-        
+        """
+        Determine the background color for a flight's queue button
+        based on its current status, in priority order:
+
+            1. ETA <= 5s: strong red (imminent timeout).
+            2. Priority flight: light yellow.
+            3. Delayed flight: gray.
+            4. Constrained flight (has a required runway): light blue.
+            5. Otherwise (normal flight): light blue.
+
+        Args:
+            flight (Flight): The flight to determine a color for.
+
+        Returns:
+            str: A Tkinter-compatible color string (hex).
+        """
         #<5 sec
         if flight.eta <= 5:
-            return "#ff4d4d"  # vermelho forte
+            return "#ff4d4d"  
         
         # priority
         if getattr(flight, "is_priority", False):
-            return "#fff3b0"   # amarelo claro
+            return "#fff3b0"  
 
         # delay
         if getattr(flight, "is_delayed", False):
-            return "#d9d9d9"   # cinza
+            return "#d9d9d9"   
         
         # constraint
         if flight.required_runway is not None:
-            return "#e6f0ff"    # vermelho claro #ffe6e6
+            return "#e6f0ff"    
 
         # normal
-        return "#e6f0ff"       # azul claro
-
+        return "#e6f0ff"      
+    
 
     def select_flight(self, button, flight):
+        """
+        Handle a click on a flight's queue button: select it (visually
+        highlighting it) and restore the previous selection's normal
+        color.
 
-        # restaurar botão anterior (se ainda existir)
+        Args:
+            button (tk.Button): The button that was clicked.
+            flight (Flight): The flight it represents.
+        """
         if (
             self.selected_flight_button
             and self.selected_flight_button.winfo_exists()
@@ -341,26 +475,33 @@ class ATCApp:
             prev_color = self.get_flight_base_color(self.selected_flight_obj)
             self.selected_flight_button.config(bg=prev_color)
 
-        # atualizar seleção
         self.selected_flight_button = button
         self.selected_flight_obj = flight
         self.selected_flight = flight.callsign
 
-        # highlight azul mais forte para seleção
         if button.winfo_exists():
             button.config(bg="#99ccff")
 
-        #self.add_log(f"Selected flight: {flight.callsign}")
 
-    
     def update_flight(self, flight):
+        """
+        Refresh a flight's queue button text (ETA/callsign/runway
+        constraint) and background color to reflect its current state.
 
+        Called once per second for every active flight by
+        EventScheduler.schedule_flight_update. No-op if the flight's
+        button no longer exists (e.g. it was just removed).
+
+        Args:
+            flight (Flight): The flight whose button should be
+                refreshed.
+        """
         btn = self.flight_buttons.get(flight)
 
         if not btn or not btn.winfo_exists():
             return
 
-        # -------- TEXTO --------
+        # -------- TEXT --------
 
         offset = 43
 
@@ -370,25 +511,38 @@ class ATCApp:
 
         text = f"{' ' * offset}{eta_part} - {callsign_part} {runway_part}"
 
-        # -------- COR --------
+        # -------- COLOR --------
 
         if flight == self.selected_flight_obj:
-            bg_color = "#99ccff"  # manter highlight da seleção
+            bg_color = "#99ccff"  
         else:
             bg_color = self.get_flight_base_color(flight)
 
         btn.config(text=text, bg=bg_color)
 
-
     def remove_flight(self, flight):
+        """
+        Remove a flight's button from the queue (e.g. because it
+        expired or was successfully assigned).
+
+        Args:
+            flight (Flight): The flight to remove from display.
+        """
         btn = self.flight_buttons.pop(flight, None)
         if btn:
             btn.destroy()
             #self.add_log(f"Flight {flight.callsign} expired.")
 
-    
     def refresh_flight_list(self):
+        """
+        Fully rebuild the flight queue from the engine's current
+        `flights` list: destroys all existing buttons and recreates
+        one per active flight, then restores the visual highlight on
+        the currently selected flight (if it's still active).
 
+        Called after a successful `authorize()` to reflect the removal
+        of the just-assigned flight.
+        """
         for widget in self.scroll.scrollable_frame.winfo_children():
             widget.destroy()
 
@@ -397,7 +551,6 @@ class ATCApp:
         for flight in self.engine.flights:
             self.add_flight_button(flight)
 
-        # restaurar seleção visual
         if self.selected_flight_obj in self.flight_buttons:
             btn = self.flight_buttons[self.selected_flight_obj]
             btn.config(bg="#99ccff")
@@ -406,7 +559,30 @@ class ATCApp:
     # -----------------------------------
 
     def authorize(self):
+        """
+        Commit the currently selected flight-runway pairing: the main
+        action triggered by the AUTHORIZE button.
 
+        Sequence:
+            1. If either a flight or a runway isn't selected, show an
+               error popup and abort.
+            2. If the selected flight is no longer active (e.g. it
+               expired in the meantime), show an error popup, clear
+               the stale selection, and abort.
+            3. Attempt the assignment via
+               `engine.assign_flight_to_runway`.
+            4. If it's a constraint violation, show an error popup and
+               abort (selection is preserved, so the participant can
+               try a different runway).
+            5. If the runway was already occupied (`False`), abort
+               silently (no popup).
+            6. On success: remove the flight from the engine's active
+               list, log a "FLIGHT_DT_<decision_time>_<callsign>"
+               event (decision time = seconds since the flight
+               spawned), log a confirmation message to the console,
+               refresh the flight queue display, and clear the current
+               selections.
+        """
         if not self.selected_flight or not self.selected_runway:
             #self.add_log("Select a flight and a runway first.")
             msg = f"Select a flight and a runway first."
@@ -456,8 +632,13 @@ class ATCApp:
         self.selected_flight_button = None
         self.selected_flight_obj = None
 
-
     def add_log(self, msg):
+        """
+        Append a plain text line to the console log area.
+
+        Args:
+            msg (str): The text to display.
+        """
         row = tk.Frame(self.message_frame, bg="white")
         row.pack(fill="x", pady=1)
 
@@ -470,11 +651,22 @@ class ATCApp:
         )
         label.pack(side="left", fill="x")
 
-
     #POPUP
 
     def show_error_popup(self, message):
+        """
+        Show a brief, centered, red, borderless popup window with an
+        error/warning message, which closes itself automatically after
+        2 seconds.
 
+        Used for validation feedback (missing selection, occupied
+        runway, constraint violation, stale selection) that the
+        participant should notice immediately, in addition to (or
+        instead of) the console log.
+
+        Args:
+            message (str): The text to display in the popup.
+        """
         popup = tk.Toplevel(self.root)
         popup.overrideredirect(True)  
         popup.attributes("-topmost", True)
@@ -501,14 +693,18 @@ class ATCApp:
             justify="center"
         )
         label.pack(expand=True)
-
-        # fecha automaticamente ao fim de 2 segundos
         self.root.after(2000, popup.destroy)
 
 
-    #System Messages
-
     def add_system_message(self, message_obj):
+        """
+        Register a newly generated SystemMessage in the engine's list
+        and display it in the console with a checkbox the participant
+        can tick to acknowledge it.
+
+        Args:
+            message_obj (SystemMessage): The message to display.
+        """
         self.engine.system_messages.append(message_obj)
 
         row = tk.Frame(self.message_frame, bg="white")
@@ -538,9 +734,16 @@ class ATCApp:
             "label": label
         }
 
-    
     def update_message_timers(self):
+        """
+        Refresh the displayed countdown ("(<n>s)") on every
+        non-expired pending system message, then reschedule itself to
+        run again in 1 second.
 
+        Called once at __init__ time to kick off this independent
+        self-rescheduling loop (separate from EventScheduler's own
+        ticking, though both read/write related SystemMessage state).
+        """
         for msg, widgets in list(self.system_message_widgets.items()):
 
             if msg.expired:
@@ -560,8 +763,14 @@ class ATCApp:
 
         self.root.after(1000, self.update_message_timers)
 
-
     def remove_system_message(self, message_obj):
+        """
+        Remove a system message's row from the console (e.g. because
+        it expired), destroying its widgets.
+
+        Args:
+            message_obj (SystemMessage): The message to remove.
+        """
         widget_dict = self.system_message_widgets.pop(message_obj, None)
 
         if widget_dict:
@@ -570,8 +779,23 @@ class ATCApp:
             if row and row.winfo_exists():
                 row.destroy()
 
-
     def acknowledge_message(self, message_obj, var, label):
+        """
+        Handle the participant ticking a system message's
+        acknowledgement checkbox: mark it acknowledged, restyle its
+        label to indicate completion, and log its reaction time.
+
+        No-op if the checkbox was unticked (var.get() is False) rather
+        than ticked — this only handles the ticking action, not
+        un-ticking.
+
+        Args:
+            message_obj (SystemMessage): The message being
+                acknowledged.
+            var (tk.BooleanVar): The checkbox's bound variable.
+            label (tk.Label): The message's text label, restyled to
+                green/non-bold once acknowledged.
+        """
         if not var.get():
             return
 
@@ -587,9 +811,30 @@ class ATCApp:
         self.engine.session.log_event(f"MESSAGE_RT_{rt:.3f}")
 
     # -----------------------------------
-        
+
 
 class StartMenu:
+    """
+    The initial screen shown when the application launches (or when
+    returning from a session via Escape): lets the experimenter pick a
+    participant ID (1-30) and choose to start the real experiment or a
+    practice run.
+
+    Attributes:
+        root: The Tkinter root window.
+        on_start: Callback invoked with `(participant_id)` or
+            `(participant_id, practice=True)` when the corresponding
+            button is pressed — typically wired up to construct a new
+            ExperimentalSession.
+        frame (tk.Frame): The container holding all of this menu's
+            widgets, destroyed when transitioning away from the menu.
+        participant_var (tk.IntVar): Bound to the participant ID
+            spinbox, defaulting to 1.
+        spinbox (tk.Spinbox): Lets the experimenter pick a participant
+            ID between 1 and 30 (matching the range of precomputed
+            Latin square entries in ExperimentalSession).
+    """
+
     def __init__(self, root, on_start_callback):
         self.root = root
         self.on_start = on_start_callback
@@ -643,15 +888,23 @@ class StartMenu:
             command=self.start_practice
         ).pack(pady=10)
 
-
     def start_experiment(self):
+        """
+        Handle the START button: read the chosen participant ID,
+        tear down the menu, and invoke `on_start(participant_id)` to
+        begin the real experiment.
+        """
         participant_id = self.participant_var.get()
         self.frame.destroy()
         self.on_start(participant_id)
 
     def start_practice(self):
+        """
+        Handle the PRACTICE button: read the chosen participant ID,
+        tear down the menu, and invoke
+        `on_start(participant_id, practice=True)` to begin a looping
+        practice run instead of the real experiment.
+        """
         participant_id = self.participant_var.get()
         self.frame.destroy()
         self.on_start(participant_id, practice=True)
-
-
